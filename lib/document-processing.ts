@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+
 export type DocumentChunk = {
   index: number;
   text: string;
@@ -6,6 +8,7 @@ export type DocumentChunk = {
   hash: string;
 };
 
+const require = createRequire(import.meta.url);
 const textDecoder = new TextDecoder("utf-8", { fatal: false });
 
 export function isSupportedUpload(file: File) {
@@ -40,10 +43,8 @@ export async function readFileText(file: File) {
   const type = file.type.toLowerCase();
 
   if (type === "application/pdf" || name.endsWith(".pdf")) {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: Buffer.from(bytes) });
-    const parsed = await parser.getText();
-    await parser.destroy();
+    const pdfParse = require("pdf-parse") as (data: Buffer) => Promise<{ text: string }>;
+    const parsed = await pdfParse(Buffer.from(bytes));
 
     return {
       bytes,

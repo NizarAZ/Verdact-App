@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     if (!isSupportedUpload(file)) {
-      return NextResponse.json({ error: "Upload a text, markdown, JSON, or CSV document." }, { status: 400 });
+      return NextResponse.json({ error: "Upload a text, markdown, JSON, CSV, or PDF document." }, { status: 400 });
     }
 
     const { bytes, text } = await readFileText(file);

@@ -6,11 +6,15 @@ const nextConfig = {
     "localhost"
   ],
   experimental: {
+    outputFileTracingIncludes: {
+      "/api/**/*": [
+        "./node_modules/@shelby-protocol/clay-codes/dist/clay.wasm"
+      ]
+    },
     serverComponentsExternalPackages: [
       "@xenova/transformers",
       "onnxruntime-node",
       "pdf-parse",
-      "pdfjs-dist",
       "sharp"
     ]
   }
