@@ -1,0 +1,16 @@
+
+> shelby-animated-landing@0.1.0 dev
+> next dev --hostname 0.0.0.0 --port 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Network:      http://0.0.0.0:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1360ms
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 629ms (189 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 2.7s (861 modules)
+ GET /app/upload 404 in 2848ms

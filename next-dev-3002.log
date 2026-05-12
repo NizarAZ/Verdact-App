@@ -1,0 +1,15 @@
+
+> shelby-animated-landing@0.1.0 dev
+> next dev -p 3002
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3002
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1569ms
+ ○ Compiling / ...
+ ✓ Compiled / in 3.8s (1398 modules)
+ GET / 200 in 4059ms
+ GET / 200 in 37ms
+[?25h
