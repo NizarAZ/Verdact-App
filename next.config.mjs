@@ -1,3 +1,5 @@
+import path from "node:path";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -17,6 +19,16 @@ const nextConfig = {
       "pdf-parse",
       "sharp"
     ]
+  },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.resolve.alias["@shelby-protocol/clay-codes"] = path.resolve(
+        process.cwd(),
+        "lib/shelby-clay-codes.mjs"
+      );
+    }
+
+    return config;
   }
 };
 
