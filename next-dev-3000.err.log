@@ -1,0 +1,4 @@
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (192kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+(node:4212) Warning: Label 'embedding' already exists for console.time()
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4212) Warning: No such label 'embedding' for console.timeEnd()
