@@ -9,8 +9,6 @@ Verdact is a RAG pipeline where every answer carries cryptographic proof. Docume
 
 🔗 Live Demo: [verdact.vercel.app](https://verdact.vercel.app)
 
----
-
 ## The Problem
 
 Every RAG system has the same trust gap:
@@ -43,8 +41,6 @@ Answer + receipt hash        ← SHA-256 of question + answer + blob IDs
 Public verify link           ← anyone can recompute and confirm
 ```
 
----
-
 ## Key Features
 
 ### 🔐 Onchain Document Registration
@@ -68,8 +64,6 @@ Anyone with a receipt ID can visit `/verify/[id]` — no wallet, no login requir
 ### 🌐 Wallet-Based Identity
 No passwords, no email accounts. Your Petra wallet is your identity. All documents, queries, and receipts are scoped to your connected wallet address.
 
----
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -82,8 +76,6 @@ No passwords, no email accounts. Your Petra wallet is your identity. All documen
 | AI | OpenRouter API |
 | Embeddings | Local models (no API cost) |
 | Deployment | Vercel |
-
----
 
 ## Architecture
 
@@ -115,8 +107,6 @@ API Routes
                ├── Document metadata + onchain_tx_hash
                └── Answer receipts + receipt_hash
 ```
-
----
 
 ## Getting Started
 
@@ -192,19 +182,15 @@ ALTER TABLE answer_receipts DISABLE ROW LEVEL SECURITY;
 npm run dev
 ```
 
-Open `http://localhost:3000` — connect your Petra wallet set to Shelbynet.
-
----
+Open `http://localhost:3000` and connect your Petra wallet set to Shelbynet.
 
 ## Wallet Setup (Shelbynet)
 
 1. Install [Petra Wallet](https://petra.app)
 2. Open Settings → Network → Switch to **Shelbynet**
 3. Get free testnet tokens from the Shelby faucet: [docs.shelby.xyz/tools/wallets/petra-setup](https://docs.shelby.xyz/tools/wallets/petra-setup)
-   - APT tokens (for gas)
+   - APT tokens (for gas fees)
    - ShelbyUSD tokens (for blob storage)
-
----
 
 ## How Verification Works
 
@@ -217,8 +203,6 @@ Every answer at Verdact is independently verifiable:
 5. The page re-fetches the receipt and recomputes the hash
 6. If `recomputed_hash === stored_hash` → **answer unchanged**
 7. Source blobs link to Shelby Explorer for onchain confirmation
-
----
 
 ## Project Structure
 
@@ -258,8 +242,6 @@ Verdact-App/
 └── middleware.ts
 ```
 
----
-
 ## Roadmap
 
 - [ ] Vector semantic search (upgrade from keyword chunking)
@@ -270,21 +252,14 @@ Verdact-App/
 - [ ] Mobile wallet support (beyond Petra)
 - [ ] Export receipts as signed PDF certificates
 
----
-
 ## Vision
 
 > AI systems that answer, remember, and prove.
 
 Verdact is infrastructure for a world where AI answers are not trusted by default — they are verified by design. Every answer carries its evidence. Every source is traceable to the chain.
 
----
-
 ## License
 
 MIT
 
----
-
 Built on [Shelby Protocol](https://shelby.xyz) ⚡ · Powered by [Aptos](https://aptos.dev)
-
