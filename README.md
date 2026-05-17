@@ -1,306 +1,290 @@
-[README_Verdact.md](https://github.com/user-attachments/files/27652558/README_Verdact.md)
 # Verdact
 
-> **AI answers with evidence attached.**  
-> Verifiable AI document intelligence powered by Shelby Protocol.
+> **AI answers you can verify onchain.**
+> Verifiable document intelligence built on Shelby Protocol and Aptos.
 
-Verdact transforms raw documents into searchable, verifiable AI knowledge using decentralized hot storage and cryptographic proof infrastructure.
+Verdact is a RAG pipeline where every answer carries cryptographic proof. Documents are registered onchain via the Shelby smart contract. Every AI answer generates a receipt with a hash, wallet address, and source blob references — publicly verifiable by anyone.
 
-Built for teams, researchers, analysts, and AI-native workflows that require **persistent retrieval, fast querying, and proof-backed outputs**.
+**Not just another AI chat. A verifiable knowledge layer.**
 
----
-
-## Why Verdact?
-
-Most AI tools generate answers.
-
-Verdact generates answers **you can verify**.
-
-Traditional AI workflows suffer from:
-
-- Lost context between sessions
-- Hallucinated outputs without evidence
-- Centralized storage risk
-- Slow retrieval pipelines
-- No cryptographic proof of source integrity
-
-Verdact solves this by combining:
-
-- ⚡ Real-time decentralized storage
-- 🧠 Retrieval-Augmented Generation (RAG)
-- 🔐 Verifiable receipts
-- 📂 AI-powered document indexing
-- 🌐 Persistent AI memory infrastructure
+🔗 Live Demo: [verdact.vercel.app](https://verdact.vercel.app)
 
 ---
 
-# Core Concept
+## The Problem
 
-Upload documents → index content → query with AI → retrieve grounded answers with decentralized verification.
+Every RAG system has the same trust gap:
 
-```txt
-User
-  │
-  ▼
-Verdact UI (Next.js)
-  │
-  ▼
-API Layer
-  │
-  ├── Shelby Protocol
-  │      ├── Blob Storage
-  │      ├── Retrieval
-  │      └── Verification Receipts
-  │
-  └── AI Processing
-         ├── Chunking
-         ├── Embeddings
-         └── Context Retrieval
+- The app claims it used certain documents
+- You have no way to verify that claim
+- Answers can be fabricated, sources can be swapped
+- No audit trail survives a session
+
+## The Solution
+
+Verdact anchors document registration to the Aptos blockchain via Shelby Protocol's smart contract. Every uploaded document gets a wallet-signed onchain transaction. Every AI answer generates a receipt hash stored with blob references, wallet address, and timestamp — and anyone can re-run the hash check to confirm the answer hasn't changed.
+
+```
+Upload doc
+    │
+    ▼
+Shelby blob storage          ← document bytes stored on decentralized hot storage
+    │
+    ▼
+Aptos smart contract         ← wallet signs blob_metadata::register_blob tx
+    │
+    ▼
+AI retrieves chunks          ← only onchain-confirmed blobs are queryable
+    │
+    ▼
+Answer + receipt hash        ← SHA-256 of question + answer + blob IDs
+    │
+    ▼
+Public verify link           ← anyone can recompute and confirm
 ```
 
 ---
 
-# Features
+## Key Features
 
-### 📄 Intelligent Document Upload
-Upload:
+### 🔐 Onchain Document Registration
+Every document upload triggers a wallet-signed transaction on Shelbynet via `blob_metadata::register_blob`. The Aptos transaction hash is stored alongside the document — proof of existence at a specific time, owned by a specific wallet.
 
-- PDF
-- TXT
-- Markdown
-- JSON
-- CSV
+### 🧠 Verifiable RAG Pipeline
+Only documents confirmed onchain are queryable. The AI retrieves chunks from Shelby blob storage and generates answers grounded in registered sources.
 
-Documents are parsed, chunked, indexed, and stored on Shelby Protocol.
+### 📄 Answer Receipts
+Every query generates a receipt containing:
+- Question and answer
+- Source blob IDs used
+- SHA-256 hash of the full context
+- Wallet address
+- Timestamp
+- Public verification URL
 
----
+### ✅ Public Verification
+Anyone with a receipt ID can visit `/verify/[id]` — no wallet, no login required. The page recomputes the receipt hash and confirms it matches. If it does: the answer hasn't changed since it was generated.
 
-### 🔎 AI Retrieval
-Query uploaded knowledge naturally:
-
-```txt
-"What are the payment conditions in this contract?"
-"Summarize this research paper."
-"Find contradictions between these documents."
-```
-
----
-
-### ⚡ Decentralized Hot Storage
-Powered by Shelby Protocol for:
-
-- Fast retrieval
-- Persistent storage
-- Distributed availability
-- AI-native infrastructure
-
-Unlike cold archival systems, Verdact is optimized for active AI workloads.
+### 🌐 Wallet-Based Identity
+No passwords, no email accounts. Your Petra wallet is your identity. All documents, queries, and receipts are scoped to your connected wallet address.
 
 ---
 
-### 🔐 Verifiable Evidence
-Every interaction can be tied back to stored document data through Shelby verification primitives.
-
-Designed for:
-
-- Research
-- Legal workflows
-- AI agent memory
-- Internal knowledge systems
-- Proof-based AI pipelines
-
----
-
-### 🧠 Persistent AI Context
-Verdact enables long-term contextual memory for AI systems instead of disposable chat sessions.
-
----
-
-# Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, React, TailwindCSS |
-| Backend | Next.js API Routes |
-| Storage | Shelby Protocol SDK |
-| Database | Supabase |
-| Auth | Clerk |
-| AI Pipeline | Gemini |
+| Frontend | Next.js 14, TypeScript, TailwindCSS |
+| Auth | Petra Wallet (Aptos) via `@aptos-labs/wallet-adapter-react` |
+| Storage | Shelby Protocol SDK (decentralized hot storage on Aptos) |
+| Onchain | Aptos smart contract — `blob_metadata::register_blob` |
+| Database | Supabase (metadata index + receipt storage) |
+| AI | OpenRouter API |
+| Embeddings | Local models (no API cost) |
 | Deployment | Vercel |
-| Language | TypeScript |
 
 ---
 
-# Architecture
+## Architecture
 
-```txt
-Frontend (Next.js)
+```
+Petra Wallet (user identity)
+        │
+        ▼
+Verdact UI (Next.js)
         │
         ▼
 API Routes
         │
-        ├── Shelby SDK
-        │      ├── Upload blobs
-        │      ├── Retrieve chunks
-        │      └── Verification layer
+        ├── Shelby Protocol SDK
+        │      ├── Upload blob → get blob ID
+        │      ├── Retrieve chunks for RAG
+        │      └── Read blob paths for verification
         │
-        ├── AI Processing
-        │      ├── Parsing
-        │      ├── Chunking
-        │      └── Retrieval
+        ├── Aptos Smart Contract
+        │      └── blob_metadata::register_blob
+        │             ← wallet signs tx on every upload
+        │             ← tx hash stored as proof of registration
+        │
+        ├── AI Pipeline
+        │      ├── Document chunking
+        │      ├── Local embeddings
+        │      └── Context retrieval + answer generation
         │
         └── Supabase
-               └── Metadata & indexing
+               ├── Document metadata + onchain_tx_hash
+               └── Answer receipts + receipt_hash
 ```
 
 ---
 
-# Getting Started
+## Getting Started
 
-## Clone
+### Clone
 
 ```bash
 git clone https://github.com/NizarAZ/Verdact-App.git
-
 cd Verdact-App
 ```
 
----
-
-## Install
+### Install
 
 ```bash
 npm install
 ```
 
----
+### Environment Variables
 
-## Environment Variables
-
-Create:
-
-```txt
-.env.local
-```
-
-Add:
+Create `.env.local`:
 
 ```env
-# Shelby
+# Shelby Protocol
 SHELBY_API_KEY=your_key
+NEXT_PUBLIC_CONTRACT_ADDRESS=0x85fdb9a176ab8ef1d9d9c1b60d60b3924f0800ac1de1cc2085fb0b8bb4988e6a
+NEXT_PUBLIC_SHELBY_RPC_URL=https://api.shelbynet.shelby.xyz/shelby
+NEXT_PUBLIC_SHELBY_FULLNODE_URL=https://api.shelbynet.shelby.xyz/v1
 
 # Supabase
 SUPABASE_URL=your_url
 SUPABASE_ANON_KEY=your_key
 SUPABASE_SERVICE_ROLE_KEY=your_key
 
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_key
-CLERK_SECRET_KEY=your_key
-
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/app
-NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/app
-
 # AI
-GEMINI_API_KEY=your_key
+OPENROUTER_API_KEY=your_key
 ```
 
----
+### Database Setup
 
-## Run Locally
+Run in Supabase SQL Editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet_address TEXT NOT NULL,
+  title TEXT,
+  file_name TEXT,
+  file_hash TEXT,
+  blob_id TEXT,
+  onchain_tx_hash TEXT,
+  chunk_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS answer_receipts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wallet_address TEXT NOT NULL,
+  query TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  receipt_hash TEXT NOT NULL,
+  onchain_tx_hash TEXT,
+  blob_ids_used TEXT[],
+  document_id UUID REFERENCES documents(id),
+  created_at TIMESTAMP DEFAULT now()
+);
+
+ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
+ALTER TABLE answer_receipts DISABLE ROW LEVEL SECURITY;
+```
+
+### Run Locally
 
 ```bash
 npm run dev
 ```
 
-Open:
-
-```txt
-http://localhost:3000
-```
+Open `http://localhost:3000` — connect your Petra wallet set to Shelbynet.
 
 ---
 
-# Project Structure
+## Wallet Setup (Shelbynet)
 
-```txt
+1. Install [Petra Wallet](https://petra.app)
+2. Open Settings → Network → Switch to **Shelbynet**
+3. Get free testnet tokens from the Shelby faucet: [docs.shelby.xyz/tools/wallets/petra-setup](https://docs.shelby.xyz/tools/wallets/petra-setup)
+   - APT tokens (for gas)
+   - ShelbyUSD tokens (for blob storage)
+
+---
+
+## How Verification Works
+
+Every answer at Verdact is independently verifiable:
+
+1. Ask a question → AI answers using registered document chunks
+2. A receipt is saved: `{ question, answer, blob_ids_used, wallet_address, timestamp }`
+3. A SHA-256 hash of the receipt is computed and stored
+4. Anyone visits `/verify/[receipt_id]`
+5. The page re-fetches the receipt and recomputes the hash
+6. If `recomputed_hash === stored_hash` → **answer unchanged**
+7. Source blobs link to Shelby Explorer for onchain confirmation
+
+---
+
+## Project Structure
+
+```
 Verdact-App/
 │
 ├── app/
 │   ├── api/
+│   │   ├── upload/          ← Shelby blob upload + onchain registration
+│   │   ├── query/           ← RAG pipeline + receipt generation
+│   │   ├── documents/       ← document list by wallet
+│   │   └── stats/           ← dashboard stats by wallet
+│   │
+│   ├── app/                 ← authenticated app routes
 │   │   ├── upload/
 │   │   ├── query/
-│   │   ├── verify/
-│   │   └── documents/
+│   │   ├── receipts/
+│   │   └── verify/
 │   │
-│   ├── app/
-│   └── sign-in/
+│   └── verify/[id]/         ← public verification page (no login required)
 │
 ├── components/
+│   ├── dashboard/
+│   ├── verify/
+│   └── WalletProvider.tsx
 │
 ├── lib/
-│   ├── shelby/
-│   ├── ai/
+│   ├── shelby/              ← Shelby SDK integration
+│   ├── onchain.ts           ← Aptos smart contract calls
+│   ├── ai/                  ← RAG pipeline
 │   ├── supabase/
 │   └── document-processing/
 │
-├── public/
-│
 ├── scripts/
+│   └── supabase-onchain-schema.sql
 │
 └── middleware.ts
 ```
 
 ---
 
-# Current Capabilities
+## Roadmap
 
-- Document upload
-- Shelby decentralized storage integration
-- AI document retrieval
-- User authentication
-- Verification workflows
-- Multi-document handling
-- Production deployment on Vercel
-
----
-
-# Roadmap
-
-- Vector semantic search
-- Multi-agent memory systems
-- Collaborative workspaces
-- Encrypted private knowledge vaults
-- Source-linked AI citations
-- AI workflow automation
-- Team-level retrieval systems
-- Real-time document syncing
+- [ ] Vector semantic search (upgrade from keyword chunking)
+- [ ] Multi-document cross-querying
+- [ ] Encrypted private knowledge vaults
+- [ ] Team-level shared document workspaces
+- [ ] AI workflow automation with receipt chains
+- [ ] Mobile wallet support (beyond Petra)
+- [ ] Export receipts as signed PDF certificates
 
 ---
 
-# Vision
+## Vision
 
-Verdact is building infrastructure for:
+> AI systems that answer, remember, and prove.
 
-> AI systems that remember, retrieve, verify, and reason over persistent decentralized knowledge.
-
-Not just another chatbot.  
-A verifiable AI knowledge layer.
+Verdact is infrastructure for a world where AI answers are not trusted by default — they are verified by design. Every answer carries its evidence. Every source is traceable to the chain.
 
 ---
 
-# Live Demo
-
-https://verdact.vercel.app/
-
----
-
-# License
+## License
 
 MIT
 
 ---
 
-Built on Shelby Protocol ⚡
+Built on [Shelby Protocol](https://shelby.xyz) ⚡ · Powered by [Aptos](https://aptos.dev)
+
