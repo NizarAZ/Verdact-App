@@ -119,6 +119,7 @@ export function UploadFlow() {
     const form = new FormData();
     form.append("file", file);
     form.append("title", derivedTitle);
+    form.append("walletAddress", address || "");
 
     try {
       const response = await walletFetch("/api/upload", {
@@ -144,6 +145,7 @@ export function UploadFlow() {
       confirmForm.append("blobId", payload.blobId);
       confirmForm.append("fileHash", payload.fileHash);
       confirmForm.append("onchainTxHash", nextTxHash);
+      confirmForm.append("walletAddress", address || "");
 
       const confirmResponse = await walletFetch("/api/upload/confirm", {
         method: "POST",

@@ -95,7 +95,7 @@ export function StatsPanel() {
       }
 
       try {
-        const response = await walletFetch("/api/stats", { cache: "no-store" });
+        const response = await walletFetch(`/api/stats?wallet=${address}`, { cache: "no-store" });
         const payload = (await response.json()) as StatsResponse;
         if (mounted) setStats({ ...emptyStats, ...payload });
       } catch {

@@ -23,9 +23,10 @@ function formatDocumentIndexWarning(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const walletAddress = getWalletAddress(request);
     const workspaceId = await getWorkspaceId(request);
     const form = await request.formData();
+    const walletAddressFromBody = typeof form.get("walletAddress") === "string" ? String(form.get("walletAddress")) : "";
+    const walletAddress = walletAddressFromBody || getWalletAddress(request);
     const file = form.get("file");
     const titleValue = form.get("title");
     const documentId = typeof form.get("documentId") === "string" ? String(form.get("documentId")) : "";
@@ -161,7 +162,7 @@ export async function POST(request: Request) {
     try {
       await insertDocumentRecord(documentRecord);
     } catch (recordError) {
-      console.error("Document index write failed", recordError);
+      console.error("Supabase insert failed:", recordError);
       metadataWarning = metadataWarning ?? formatDocumentIndexWarning(recordError);
     }
 

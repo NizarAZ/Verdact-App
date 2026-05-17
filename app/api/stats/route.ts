@@ -21,9 +21,11 @@ function latestActivityIso(values: (string | null | undefined)[]) {
 
 export async function GET(request: Request) {
   const accountAddress = getServerAccountAddress();
+  const { searchParams } = new URL(request.url);
+  const walletAddressFromQuery = searchParams.get("wallet");
 
   try {
-    const walletAddress = getWalletAddress(request);
+    const walletAddress = walletAddressFromQuery || getWalletAddress(request);
     const workspaceId = await getWorkspaceId(request);
     const [documents, receipts] = await Promise.all([
       listDocumentRecords(walletAddress, 500),
