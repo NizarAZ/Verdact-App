@@ -53,6 +53,23 @@ export async function insertDocumentRecord(record: DocumentRecord) {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("documents").upsert(record, { onConflict: "id" });
 
+  if (error && (error.code === "PGRST204" || error.message.includes("chunk_count") || error.message.includes("size"))) {
+    const fallbackRecord = {
+      id: record.id,
+      wallet_address: record.wallet_address,
+      file_name: record.file_name,
+      title: record.title,
+      onchain_tx_hash: record.onchain_tx_hash,
+      blob_id: record.blob_id,
+      file_hash: record.file_hash,
+      created_at: record.created_at
+    };
+    const fallback = await supabase.from("documents").upsert(fallbackRecord, { onConflict: "id" });
+
+    if (fallback.error) throw fallback.error;
+    return;
+  }
+
   if (error) throw error;
 }
 

@@ -16,11 +16,6 @@ function jsonBytes(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value, null, 2));
 }
 
-function formatDocumentIndexWarning(error: unknown) {
-  // Don't show alarming errors for non-critical background failures
-  return null;
-}
-
 export async function POST(request: Request) {
   try {
     const workspaceId = await getWorkspaceId(request);
@@ -83,6 +78,13 @@ export async function POST(request: Request) {
       }
     }
 
+    const storedBytes = await downloadWalletBlobBytes(walletAddress, blobId);
+    const storedHash = await sha256Hex(storedBytes);
+
+    if (storedHash !== fileHash) {
+      return NextResponse.json({ error: "Shelby stored blob hash does not match the selected file." }, { status: 502 });
+    }
+
     const compactDocumentId = documentId.replace(/-/g, "");
     const cleanName = sanitizeBlobSegment(file.name);
     const extension = cleanName.includes(".") ? cleanName.split(".").pop() : "txt";
@@ -133,7 +135,6 @@ export async function POST(request: Request) {
       };
     });
 
-    let metadataWarning: string | null = null;
     const documentRecord: DocumentRecord = {
       id: documentId,
       wallet_address: walletAddress,
@@ -147,22 +148,12 @@ export async function POST(request: Request) {
       created_at: now
     };
 
-    try {
-      await uploadBlobsToShelby([
-        { blobName: metaBlobName, blobData: jsonBytes(meta) },
-        ...chunkPayloads.map((chunk) => ({ blobName: chunk.blobName, blobData: jsonBytes(chunk.payload) }))
-      ]);
-    } catch (shelbyIndexError) {
-      console.error("Shelby metadata index write failed", shelbyIndexError);
-      metadataWarning = "Shelby chunk indexing failed; document is onchain but may not be queryable until Shelby indexing is retried.";
-    }
+    await uploadBlobsToShelby([
+      { blobName: metaBlobName, blobData: jsonBytes(meta) },
+      ...chunkPayloads.map((chunk) => ({ blobName: chunk.blobName, blobData: jsonBytes(chunk.payload) }))
+    ]);
 
-    try {
-      await insertDocumentRecord(documentRecord);
-    } catch (recordError) {
-      console.error("Supabase insert failed:", recordError);
-      metadataWarning = metadataWarning ?? formatDocumentIndexWarning(recordError);
-    }
+    await insertDocumentRecord(documentRecord);
 
     return NextResponse.json({
       documentId,
@@ -172,8 +163,7 @@ export async function POST(request: Request) {
       fileHash,
       blobId,
       onchainTxHash,
-      metaBlobName,
-      metadataWarning
+      metaBlobName
     });
   } catch (error) {
     console.error("Upload confirmation failed", error);
