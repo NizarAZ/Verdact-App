@@ -6,14 +6,18 @@ import { useEffect, useState } from "react";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { BlobTag } from "@/components/shared/BlobTag";
 import { VerifiedBadge } from "@/components/shared/VerifiedBadge";
+import { useWallet } from "@/components/WalletProvider";
 
 type Receipt = {
   receipt_id: string;
+  wallet_address?: string;
   question: string;
   answer: string;
-  model: string;
+  model?: string;
   context_hash: string;
-  shelby_receipt_blob: string;
+  receipt_hash?: string;
+  onchain_tx_hash?: string;
+  created_at?: string | null;
   verified?: boolean;
   sources: { text: string; chunk_blob: string; context_hash: string }[];
 };
@@ -24,6 +28,7 @@ function truncateMiddle(value: string, start = 18, end = 14) {
 }
 
 export function ReceiptDetail({ id }: { id: string }) {
+  const { walletFetch } = useWallet();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,7 +37,7 @@ export function ReceiptDetail({ id }: { id: string }) {
 
     async function loadReceipt() {
       try {
-        const response = await fetch(`/api/receipts/${encodeURIComponent(id)}`, { cache: "no-store" });
+        const response = await walletFetch(`/api/receipts/${encodeURIComponent(id)}`, { cache: "no-store" });
         const payload = await response.json();
         if (mounted) setReceipt(response.ok ? (payload as Receipt) : null);
       } catch {
@@ -47,7 +52,7 @@ export function ReceiptDetail({ id }: { id: string }) {
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, walletFetch]);
 
   return (
     <div>
@@ -80,19 +85,19 @@ export function ReceiptDetail({ id }: { id: string }) {
               <p className="mt-8 whitespace-pre-wrap font-body text-sm leading-6 text-text-primary">{receipt.answer}</p>
             </article>
             <aside className="rounded-[var(--radius-md)] border border-base bg-bg-base p-5">
-              <VerifiedBadge verified={Boolean(receipt.verified ?? receipt.context_hash)} />
+              <VerifiedBadge verified={Boolean(receipt.receipt_hash)} />
               <dl className="mt-5 space-y-4">
                 <div>
-                  <dt className="font-body text-xs text-text-tertiary">context hash</dt>
-                  <dd className="mt-1 font-mono text-xs text-text-secondary">{truncateMiddle(receipt.context_hash)}</dd>
+                  <dt className="font-body text-xs text-text-tertiary">receipt hash</dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">{truncateMiddle(receipt.receipt_hash ?? receipt.context_hash)}</dd>
                 </div>
                 <div>
-                  <dt className="font-body text-xs text-text-tertiary">receipt blob</dt>
-                  <dd className="mt-1 font-mono text-xs text-text-secondary">{truncateMiddle(receipt.shelby_receipt_blob, 22, 16)}</dd>
+                  <dt className="font-body text-xs text-text-tertiary">wallet</dt>
+                  <dd className="mt-1 font-mono text-xs text-text-secondary">{truncateMiddle(receipt.wallet_address ?? "unknown", 16, 10)}</dd>
                 </div>
               </dl>
               <Link
-                href={`/app/verify?receipt=${encodeURIComponent(receipt.receipt_id)}`}
+                href={`/verify/${encodeURIComponent(receipt.receipt_id)}`}
                 className="mt-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] bg-brand px-4 font-mono text-sm font-medium text-brand-dark"
               >
                 Verify receipt

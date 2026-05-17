@@ -16,7 +16,7 @@ The pipeline:
 3. Every answer generates a receipt blob on Shelby: question + answer + source blob names + context hash
 4. Anyone can verify a receipt by re-downloading the source chunks and recomputing the hash
 
-Auth: Clerk. Each user gets a deterministic workspaceId derived from their Clerk user ID.
+Auth: Petra wallet. Each user gets a deterministic workspaceId derived from their Aptos wallet address.
 Storage: All blobs under one server Aptos account, namespaced per user by workspaceId.
 Blob paths: `v/{workspaceId}/d/{docId}/...`, `v/{workspaceId}/c/{docId}/...`, `v/{workspaceId}/r/...`
 
@@ -36,16 +36,15 @@ Steps:
 WorkspaceId must come ONLY from this function — create it in `lib/workspace.ts` if it doesn't exist:
 
 ```ts
-import { auth } from '@clerk/nextjs/server'
 import crypto from 'crypto'
 
-export async function getWorkspaceId(): Promise<string> {
-  const { userId } = await auth()
-  if (!userId) throw new Error('Unauthorized')
-  // Deterministic 12-char workspace ID from Clerk user ID
+export async function getWorkspaceId(request: Request): Promise<string> {
+  const walletAddress = request.headers.get('x-wallet-address')
+  if (!walletAddress) throw new Error('Unauthorized')
+  // Deterministic 12-char workspace ID from Aptos wallet address
   return crypto
     .createHash('sha256')
-    .update(userId)
+    .update(walletAddress.toLowerCase())
     .digest('hex')
     .slice(0, 12)
 }
@@ -129,7 +128,7 @@ Show me the console.time output from both queries.
 These were not in the original brief. Remove them. Do not replace with anything.
 
 **Navbar (all pages):**
-- KEEP: Verdact logo, "Verdact App", "built on Shelby / shelbynet", shelbynet status dot, Clerk `<UserButton />`
+- KEEP: Verdact logo, "Verdact App", "built on Shelby / shelbynet", shelbynet status dot, Petra wallet control
 - KEEP: Navigation link back to landing page
 - REMOVE: Nothing else — the navbar is correct as-is once Supabase errors are gone
 
@@ -403,7 +402,7 @@ Error cards use:
 - [ ] Clicking a receipt row opens the detail page
 - [ ] Verify button on receipt detail returns verified: true
 - [ ] Standalone verify page works with pasted receipt ID
-- [ ] All routes return 401 if user is not authenticated (Clerk middleware)
+- [ ] All routes return 401 if user is not authenticated with a connected Petra wallet
 
 ### Visual
 - [ ] No hardcoded hex colors in any component file
@@ -418,7 +417,7 @@ Error cards use:
 
 ### Before reporting done
 Run through this exact flow once:
-1. Sign in with Clerk
+1. Connect Petra wallet
 2. Upload a .txt file
 3. Ask one question about it
 4. Click the receipt from the dashboard

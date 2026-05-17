@@ -172,11 +172,12 @@ a {
 }
 
 .app-dashboard {
-  background-color: var(--bg-base);
+  background-color: #0a0a0a;
   background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 67px 67px;
+    radial-gradient(ellipse 48% 38% at 0% 0%, rgba(255, 45, 120, 0.08) 0%, transparent 70%),
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: auto, 67px 67px, 67px 67px;
   color: var(--text-primary);
 }
 
@@ -264,6 +265,31 @@ a {
 .proof-pill {
   border: 1px solid var(--color-teal);
   color: var(--color-teal);
+}
+
+.proof-rail-item {
+  position: relative;
+  padding-bottom: 4px;
+}
+
+.proof-rail-item::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: var(--color-pink);
+  opacity: 0;
+  transform: scaleX(0.35);
+  transform-origin: left;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.proof-rail-item:hover::after,
+.proof-rail-item.is-active::after {
+  opacity: 0.75;
+  transform: scaleX(1);
 }
 
 .section-surface {

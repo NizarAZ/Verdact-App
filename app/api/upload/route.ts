@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server";
 import { chunkDocument, isSupportedUpload, readFileText, sanitizeBlobSegment, sha256Hex } from "@/lib/document-processing";
-import { getEmbedding } from "@/lib/embeddings";
-import { getServerAccountAddress, uploadBlobsToShelby } from "@/lib/shelby-server";
-import { getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
+import { createBlobRegistrationPayload, toSerializableTransactionPayload } from "@/lib/onchain";
+import { getWalletAddress, getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const maxFileBytes = 2 * 1024 * 1024;
 
-function jsonBytes(value: unknown) {
-  return new TextEncoder().encode(JSON.stringify(value, null, 2));
-}
-
 export async function POST(request: Request) {
   try {
-    const workspaceId = await getWorkspaceId();
+    const walletAddress = getWalletAddress(request);
+    const workspaceId = await getWorkspaceId(request);
 
     const form = await request.formData();
     const file = form.get("file");
@@ -46,67 +42,38 @@ export async function POST(request: Request) {
     const extension = cleanName.includes(".") ? cleanName.split(".").pop() : "txt";
     const title = typeof titleValue === "string" && titleValue.trim() ? titleValue.trim() : file.name;
     const documentPrefix = workspaceBlobPrefix(workspaceId, "documents");
-    const chunkPrefix = workspaceBlobPrefix(workspaceId, "chunks");
     const originalBlobName = `${documentPrefix}${compactDocumentId}/original.${extension || "txt"}`;
-    const metaBlobName = `${documentPrefix}${compactDocumentId}/meta.json`;
+    const fileHash = await sha256Hex(bytes);
     const textHash = await sha256Hex(text);
-    const now = new Date().toISOString();
-    const accountAddress = getServerAccountAddress();
-
-    const meta = {
-      document_id: documentId,
-      workspace_id: workspaceId,
-      title,
-      file_name: file.name,
-      content_type: file.type || "text/plain",
-      size: file.size,
-      text_hash: textHash,
-      chunk_count: chunks.length,
-      shelby_account: accountAddress,
-      shelby_blob: originalBlobName,
-      created_at: now
-    };
-
-    const chunkEmbeddings = await Promise.all(chunks.map((chunk) => getEmbedding(chunk.text)));
-    const chunkPayloads = chunks.map((chunk) => {
-      const blobName = `${chunkPrefix}${compactDocumentId}/${String(chunk.index + 1).padStart(4, "0")}.json`;
-
-      return {
-        blobName,
-        payload: {
-          document_id: documentId,
-          chunk_index: chunk.index,
-          text: chunk.text,
-          start: chunk.start,
-          end: chunk.end,
-          context_hash: chunk.hash,
-          embedding: chunkEmbeddings[chunk.index],
-          source_blob: originalBlobName,
-          created_at: now
-        }
-      };
+    const oneYearMicros = 365 * 24 * 60 * 60 * 1_000_000;
+    const expirationMicros = Date.now() * 1000 + oneYearMicros;
+    const registration = await createBlobRegistrationPayload({
+      walletAddress,
+      blobName: originalBlobName,
+      blobData: bytes,
+      expirationMicros
     });
-
-    await uploadBlobsToShelby([
-      { blobName: originalBlobName, blobData: bytes },
-      { blobName: metaBlobName, blobData: jsonBytes(meta) },
-      ...chunkPayloads.map((chunk) => ({ blobName: chunk.blobName, blobData: jsonBytes(chunk.payload) }))
-    ]);
 
     return NextResponse.json({
       documentId,
       title,
       fileName: file.name,
+      fileSize: file.size,
       chunkCount: chunks.length,
+      fileHash,
       textHash,
       originalBlobName,
-      metaBlobName
+      blobId: originalBlobName,
+      expirationMicros,
+      txPayload: toSerializableTransactionPayload(registration.payload),
+      blobMerkleRoot: registration.blobMerkleRoot,
+      numChunksets: registration.numChunksets
     });
   } catch (error) {
     console.error("Upload failed", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Upload failed." },
-      { status: 500 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
     );
   }
 }

@@ -5,15 +5,21 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Check, FileText, Search } from "lucide-react";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { BlobTag } from "@/components/shared/BlobTag";
+import { useWallet } from "@/components/WalletProvider";
 
 type QueryReceipt = {
   receipt_id: string;
+  id?: string;
+  wallet_address?: string;
   question: string;
   answer: string;
   model: string;
   sources: { text: string; chunk_blob: string; context_hash: string }[];
   context_hash: string;
   shelby_receipt_blob: string;
+  timestamp?: number;
+  receipt_hash?: string;
+  blob_ids_used?: string[];
 };
 
 type DocumentItem = {
@@ -29,6 +35,7 @@ function truncateMiddle(value: string, start = 20, end = 14) {
 }
 
 export function QueryFlow() {
+  const { address, walletFetch } = useWallet();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
   const [documentId, setDocumentId] = useState("");
@@ -41,8 +48,14 @@ export function QueryFlow() {
     let mounted = true;
 
     async function loadDocuments() {
+      // Guard: don't fetch until wallet is connected
+      if (!address) {
+        if (mounted) setDocumentsLoaded(true);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/documents?limit=25", { cache: "no-store" });
+        const response = await walletFetch("/api/documents?limit=25", { cache: "no-store" });
         const payload = (await response.json()) as DocumentItem[];
         const nextDocuments = Array.isArray(payload) ? payload.filter((document) => document.document_id) : [];
 
@@ -59,10 +72,16 @@ export function QueryFlow() {
 
     loadDocuments();
 
+    // Timeout fallback: force loading to false after 5 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setDocumentsLoaded(true);
+    }, 5000);
+
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
-  }, []);
+  }, [address, walletFetch]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,10 +90,10 @@ export function QueryFlow() {
     setReceipt(null);
 
     try {
-      const response = await fetch("/api/query", {
+      const response = await walletFetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, documentId })
+        body: JSON.stringify({ question, documentId, walletAddress: address })
       });
       const payload = await response.json();
 
@@ -145,7 +164,7 @@ export function QueryFlow() {
               disabled={status === "asking" || question.trim().length < 3 || !documentId}
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-brand px-5 font-mono text-sm font-medium text-brand-dark transition-opacity duration-150 ease-in disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {status === "asking" ? "Searching" : "Ask selected document"}
+              {status === "asking" ? "Searching" : "Ask"}
               <Search className="h-4 w-4" />
             </button>
           </form>
@@ -154,17 +173,19 @@ export function QueryFlow() {
             <div className="border-t border-base p-8">
               <div className="flex items-center gap-2 font-body text-sm text-text-primary">
                 <Check className="h-4 w-4 text-brand" />
-                Answer receipt created
+                Answer receipt stored
               </div>
               <p className="mt-5 whitespace-pre-wrap font-body text-sm leading-6 text-text-primary">{receipt.answer}</p>
               <div className="mt-5 flex flex-wrap gap-2">
                 <BlobTag value={`${receipt.sources.length} sources`} />
-                <BlobTag value={truncateMiddle(receipt.context_hash, 12, 10)} />
+                <BlobTag value={truncateMiddle(receipt.receipt_hash ?? receipt.context_hash, 12, 10)} />
               </div>
-              <Link href={`/app/receipts/${encodeURIComponent(receipt.receipt_id)}`} className="mt-6 inline-flex items-center gap-2 font-mono text-sm text-brand">
-                Open receipt
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              {receipt.receipt_id ? (
+                <Link href={`/verify/${encodeURIComponent(receipt.receipt_id)}`} className="mt-6 inline-flex items-center gap-2 font-mono text-sm text-brand">
+                  Verify this answer
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : null}
             </div>
           ) : null}
       </section>

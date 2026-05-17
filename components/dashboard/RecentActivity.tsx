@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { VerifiedBadge } from "@/components/shared/VerifiedBadge";
+import { useWallet } from "@/components/WalletProvider";
 
 type Receipt = {
   receipt_id?: string;
@@ -14,11 +16,19 @@ type Receipt = {
   sources?: unknown[];
   total_chunks_retrieved?: number;
   context_hash?: string;
+  receipt_hash?: string;
+  onchain_tx_hash?: string;
   blobName?: string;
   creationMicros?: number | string | null;
+  created_at?: string | null;
 };
 
 function toMillis(receipt: Receipt) {
+  if (receipt.created_at) {
+    const parsed = Date.parse(receipt.created_at);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   if (typeof receipt.timestamp === "number") {
     return receipt.timestamp > 9_999_999_999 ? receipt.timestamp : receipt.timestamp * 1000;
   }
@@ -62,10 +72,11 @@ function sourceCount(receipt: Receipt) {
 }
 
 function receiptHref(receipt: Receipt) {
-  return `/app/receipts/${encodeURIComponent(receiptId(receipt))}`;
+  return `/verify/${encodeURIComponent(receiptId(receipt))}`;
 }
 
 export function RecentActivity() {
+  const { walletFetch } = useWallet();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -74,7 +85,7 @@ export function RecentActivity() {
 
     async function loadReceipts() {
       try {
-        const response = await fetch("/api/receipts?limit=3", { cache: "no-store" });
+        const response = await walletFetch("/api/receipts?limit=3", { cache: "no-store" });
         const payload = (await response.json()) as Receipt[];
         if (mounted) setReceipts(Array.isArray(payload) ? payload : []);
       } catch {
@@ -89,18 +100,18 @@ export function RecentActivity() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [walletFetch]);
 
   if (receipts.length === 0) {
     if (!loaded) return null;
 
     return (
-      <section className="rounded-[var(--radius-lg)] border border-base bg-bg-surface p-8">
+      <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <MessageSquare className="mt-1 h-4 w-4 shrink-0 text-brand" />
             <div>
-              <h2 className="font-display text-base text-text-primary">No receipts yet</h2>
+              <h2 className="font-display text-[24px] leading-none text-text-primary">No receipts yet</h2>
               <p className="mt-1 font-body text-sm text-text-tertiary">
                 Ask a question after upload to create the first receipt ID.
               </p>
@@ -118,34 +129,39 @@ export function RecentActivity() {
   }
 
   return (
-    <section className="rounded-[var(--radius-lg)] border border-base bg-bg-surface">
-      <div className="flex items-center justify-between border-b border-base p-8">
-        <h2 className="font-display text-base text-text-primary">Recent receipts</h2>
+    <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
+      <div className="flex items-center justify-between border-b border-base p-5">
+        <h2 className="font-display text-[24px] leading-none text-text-primary">Recent receipts</h2>
         <Link href="/app/receipts" className="font-body text-[13px] text-brand">
           View all
-          <span aria-hidden="true"> →</span>
+          <span aria-hidden="true"> -&gt;</span>
         </Link>
       </div>
 
       <div>
-        {receipts.map((receipt) => {
+        {receipts.map((receipt, index) => {
           const sources = sourceCount(receipt);
-          const verified = Boolean(receipt.context_hash && sources > 0);
+          const verified = Boolean(receipt.receipt_hash);
 
           return (
-            <Link
+            <motion.div
               key={`${receiptId(receipt)}-${receipt.blobName ?? ""}`}
-              href={receiptHref(receipt)}
-              className="group grid gap-3 border-b border-base p-8 transition-colors duration-150 ease-in last:border-b-0 hover:bg-bg-surface md:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] md:items-center"
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.04, ease: "easeOut" }}
             >
-              <span className="truncate font-body text-sm text-text-primary">
-                {(receipt.question ?? "Untitled receipt").slice(0, 60)}
-              </span>
-              <span className="font-body text-xs text-text-tertiary">{sources} sources</span>
-              <span className="font-mono text-xs text-text-tertiary">{relativeTime(receipt)}</span>
-              <VerifiedBadge verified={verified} />
-              <ArrowRight className="hidden h-4 w-4 text-text-tertiary opacity-0 transition-opacity duration-150 ease-in group-hover:opacity-100 md:block" />
-            </Link>
+              <Link
+                href={receiptHref(receipt)}
+                className="grid gap-3 border-b border-base p-5 transition-colors duration-150 ease-in last:border-b-0 hover:bg-white/[0.035] md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center"
+              >
+                <span className="truncate font-body text-sm text-text-primary">
+                  {(receipt.question ?? "Untitled receipt").slice(0, 60)}
+                </span>
+                <span className="font-body text-xs text-text-tertiary">{sources} sources</span>
+                <span className="font-mono text-xs text-text-tertiary">{relativeTime(receipt)}</span>
+                <VerifiedBadge verified={verified} />
+              </Link>
+            </motion.div>
           );
         })}
       </div>

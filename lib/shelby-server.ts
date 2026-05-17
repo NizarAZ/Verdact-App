@@ -1,4 +1,4 @@
-import { Account, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
+import { Account, AccountAddress, Ed25519PrivateKey, Network } from "@aptos-labs/ts-sdk";
 import { SHELBYUSD_FA_METADATA_ADDRESS, ShelbyNodeClient } from "@shelby-protocol/sdk/node";
 import { readServerEnv } from "@/lib/server-env";
 
@@ -91,24 +91,8 @@ export async function ensureServerFunding() {
 
   const client = getShelbyClient();
   const address = account.accountAddress.toString();
-  let aptBalance = await getAptBalance(client, address);
-  let shelbyUsdBalance = await getShelbyUsdBalance(client, address);
-
-  if (aptBalance < minAptOctas) {
-    await client.fundAccountWithAPT({
-      address,
-      amount: aptTopUpOctas
-    });
-    aptBalance = await getAptBalance(client, address);
-  }
-
-  if (shelbyUsdBalance < minShelbyUsdUnits) {
-    await client.fundAccountWithShelbyUSD({
-      address,
-      amount: shelbyUsdTopUpUnits
-    });
-    shelbyUsdBalance = await getShelbyUsdBalance(client, address);
-  }
+  const aptBalance = await getAptBalance(client, address);
+  const shelbyUsdBalance = await getShelbyUsdBalance(client, address);
 
   if (aptBalance < minAptOctas) {
     throw new Error(`Server Shelby account ${address} needs APT for transaction fees.`);
@@ -130,7 +114,11 @@ function normalizeShelbyUploadError(error: unknown, address: string) {
     return new Error(`Server Shelby account ${address} needs more ShelbyUSD storage funds.`);
   }
 
-  if (message.includes("Failed to upload part") || message.includes("Internal Server Error")) {
+  if (
+    message.includes("Failed to upload part") ||
+    message.includes("Failed to complete multipart upload") ||
+    message.includes("Internal Server Error")
+  ) {
     return new Error("Shelby storage accepted the registration but its upload endpoint returned 500. Verdact retried the upload and could not complete it yet.");
   }
 
@@ -148,6 +136,8 @@ function isRetryableStorageError(error: unknown) {
 
   return (
     message.includes("Failed to upload part") ||
+    message.includes("Failed to complete multipart upload") ||
+    message.includes("Failed to start multipart upload") ||
     message.includes("Internal Server Error") ||
     message.includes("status: 500") ||
     message.includes("interrupted while sending data")
@@ -187,6 +177,58 @@ export async function downloadBlobText(blobName: string) {
 
   const response = new Response(blob.readable);
   return response.text();
+}
+
+export async function downloadWalletBlobText(accountAddress: string, blobName: string) {
+  const client = getShelbyClient();
+  const blob = await client.download({
+    account: AccountAddress.from(accountAddress),
+    blobName: normalizeBlobName(blobName)
+  });
+
+  const response = new Response(blob.readable);
+  return response.text();
+}
+
+export async function downloadWalletBlobBytes(accountAddress: string, blobName: string) {
+  const client = getShelbyClient();
+  const blob = await client.download({
+    account: AccountAddress.from(accountAddress),
+    blobName: normalizeBlobName(blobName)
+  });
+
+  const response = new Response(blob.readable);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export async function putWalletBlob(params: {
+  accountAddress: string;
+  blobName: string;
+  blobData: Uint8Array;
+}) {
+  const client = getShelbyClient();
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await client.rpc.putBlob({
+        account: AccountAddress.from(params.accountAddress),
+        blobName: normalizeBlobName(params.blobName),
+        blobData: params.blobData
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+
+      if (!isRetryableStorageError(error)) {
+        throw normalizeShelbyUploadError(error, params.accountAddress);
+      }
+
+      await sleep(1000 * (attempt + 1));
+    }
+  }
+
+  throw normalizeShelbyUploadError(lastError, params.accountAddress);
 }
 
 export async function uploadBlobsToShelby(

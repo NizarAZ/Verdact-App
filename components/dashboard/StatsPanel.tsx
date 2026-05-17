@@ -1,13 +1,16 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { animate } from "framer-motion";
+import { useWallet } from "@/components/WalletProvider";
 
 type StatsResponse = {
   documents: number;
   chunks: number;
   receipts: number;
+  onchainRegistrations?: number;
+  lastActivityAt?: string | null;
   lastActivityMicros: number | null;
   accountAddress: string | null;
 };
@@ -20,21 +23,21 @@ const emptyStats: StatsResponse = {
   accountAddress: null
 };
 
-function relativeTimeFromMicros(micros: number | null) {
-  if (!micros) return "never";
+function timeAgo(dateString?: string | null) {
+  if (!dateString) return "never";
 
-  const elapsed = Date.now() - Math.floor(micros / 1000);
-  const seconds = Math.max(0, Math.floor(elapsed / 1000));
+  const date = new Date(dateString);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return "never";
 
-  if (seconds < 45) return "just now";
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
 
-  const minutes = Math.floor(seconds / 60);
+  if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;
-
-  const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-
-  const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
 
@@ -53,23 +56,13 @@ function useCountUp(value: number, ready: boolean) {
       return;
     }
 
-    let frame = 0;
-    const startedAt = performance.now();
-    const duration = 800;
+    const controls = animate(0, value, {
+      duration: 0.6,
+      ease: "easeOut",
+      onUpdate: (latest) => setDisplayValue(Math.round(latest))
+    });
 
-    const tick = (time: number) => {
-      const progress = Math.min((time - startedAt) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(value * eased));
-
-      if (progress < 1) {
-        frame = requestAnimationFrame(tick);
-      }
-    };
-
-    frame = requestAnimationFrame(tick);
-
-    return () => cancelAnimationFrame(frame);
+    return () => controls.stop();
   }, [ready, value]);
 
   return displayValue;
@@ -79,13 +72,14 @@ function MetricNumber({ value, loading }: { value: number; loading: boolean }) {
   const count = useCountUp(value, !loading);
 
   if (loading) {
-    return <span className="stats-skeleton block h-9 w-20 rounded-sm" />;
+    return <span className="stats-skeleton block h-6 w-14 rounded-sm" />;
   }
 
-  return <span className="font-mono text-[28px] font-medium leading-none text-text-primary">{count}</span>;
+  return <span className="font-mono text-[22px] font-medium leading-none text-text-primary">{count}</span>;
 }
 
 export function StatsPanel() {
+  const { address, walletFetch } = useWallet();
   const [stats, setStats] = useState<StatsResponse>(emptyStats);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -94,8 +88,14 @@ export function StatsPanel() {
     let mounted = true;
 
     async function loadStats() {
+      // Guard: don't fetch until wallet is connected
+      if (!address) {
+        if (mounted) setLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/stats", { cache: "no-store" });
+        const response = await walletFetch("/api/stats", { cache: "no-store" });
         const payload = (await response.json()) as StatsResponse;
         if (mounted) setStats({ ...emptyStats, ...payload });
       } catch {
@@ -107,80 +107,65 @@ export function StatsPanel() {
 
     loadStats();
 
+    // Timeout fallback: force loading to false after 5 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
-  }, []);
+  }, [address, walletFetch]);
 
-  const allZero = !loading && stats.documents === 0 && stats.chunks === 0 && stats.receipts === 0;
-  const lastActivity = useMemo(() => relativeTimeFromMicros(stats.lastActivityMicros), [stats.lastActivityMicros]);
+  const lastActivity = useMemo(() => timeAgo(stats.lastActivityAt), [stats.lastActivityAt]);
+  const displayAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Connect wallet";
 
   async function copyAccount() {
-    if (!stats.accountAddress) return;
+    if (!address) return;
 
-    await navigator.clipboard.writeText(stats.accountAddress);
+    await navigator.clipboard.writeText(address);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
   }
 
-  return (
-    <section className="min-h-[280px] rounded-[var(--radius-lg)] border border-base bg-bg-surface">
-      {allZero ? (
-        <div className="flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
-          <p className="font-display text-2xl text-text-primary">No documents yet.</p>
-          <p className="mt-2 font-body text-sm text-text-tertiary">Upload your first document to begin.</p>
-          <Link
-            href="/app/upload"
-            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[var(--radius-md)] bg-brand px-4 font-mono text-sm font-medium text-brand-dark"
-          >
-            Upload document
-          </Link>
-        </div>
+  const statItems = [
+    { label: "Onchain registrations", value: <MetricNumber value={stats.onchainRegistrations ?? stats.documents} loading={loading} /> },
+    { label: "Chunks indexed", value: <MetricNumber value={stats.chunks} loading={loading} /> },
+    { label: "Receipts", value: <MetricNumber value={stats.receipts} loading={loading} /> },
+    {
+      label: "Last activity",
+      value: loading ? (
+        <span className="stats-skeleton block h-6 w-16 rounded-sm" />
       ) : (
-        <div className="grid grid-cols-2">
-          <div className="border-b border-r border-base p-8">
-            <p className="font-body text-xs text-text-tertiary">Documents</p>
-            <div className="mt-3">
-              <MetricNumber value={stats.documents} loading={loading} />
-            </div>
-          </div>
-          <div className="border-b border-base p-8">
-            <p className="font-body text-xs text-text-tertiary">Chunks indexed</p>
-            <div className="mt-3">
-              <MetricNumber value={stats.chunks} loading={loading} />
-            </div>
-          </div>
-          <div className="border-r border-base p-8">
-            <p className="font-body text-xs text-text-tertiary">Receipts</p>
-            <div className="mt-3">
-              <MetricNumber value={stats.receipts} loading={loading} />
-            </div>
-          </div>
-          <div className="p-8">
-            <p className="font-body text-xs text-text-tertiary">Last activity</p>
-            <div className="mt-3">
-              {loading ? (
-                <span className="stats-skeleton block h-9 w-24 rounded-sm" />
-              ) : (
-                <span className="font-mono text-[28px] font-medium leading-none text-text-primary">{lastActivity}</span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        <span className="font-mono text-[22px] font-medium leading-none text-text-primary">{lastActivity}</span>
+      )
+    }
+  ];
 
-      <button
-        type="button"
-        onClick={copyAccount}
-        disabled={!stats.accountAddress}
-        className="flex w-full items-center justify-between border-t border-base p-8 text-left transition-colors duration-150 ease-in hover:bg-bg-elevated disabled:cursor-default disabled:hover:bg-transparent"
-      >
-        <span>
-          <span className="block font-mono text-[11px] text-text-tertiary">account</span>
-          <span className="mt-1 block font-mono text-xs text-text-secondary">{truncateAddress(stats.accountAddress)}</span>
-        </span>
-        {copied ? <Check className="h-4 w-4 text-brand" /> : <Copy className="h-4 w-4 text-text-tertiary" />}
-      </button>
+  return (
+    <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
+      <div className="flex flex-col divide-y divide-base lg:flex-row lg:items-stretch lg:divide-x lg:divide-y-0">
+        {statItems.map((item) => (
+          <div key={item.label} className="min-w-0 flex-1 px-5 py-4">
+            <p className="font-body text-[11px] text-text-tertiary">{item.label}</p>
+            <div className="mt-2">{item.value}</div>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={copyAccount}
+          disabled={!address}
+          className="flex min-w-[190px] items-center justify-between gap-4 px-5 py-4 text-left transition-colors duration-150 ease-in hover:bg-white/[0.035] disabled:cursor-default disabled:hover:bg-transparent"
+        >
+          <span className="min-w-0">
+            <span className="block font-body text-[11px] text-text-tertiary">Wallet</span>
+            <span className="mt-2 block truncate font-mono text-[15px] text-text-primary">{displayAddress}</span>
+          </span>
+          {copied ? <Check className="h-4 w-4 shrink-0 text-[var(--success)]" /> : <Copy className="h-4 w-4 shrink-0 text-text-tertiary" />}
+        </button>
+      </div>
     </section>
   );
 }

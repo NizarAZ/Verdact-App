@@ -13,6 +13,7 @@ export type AnswerSource = {
 
 export type AnswerReceipt = {
   receipt_id: string;
+  wallet_address?: string;
   question: string;
   answer: string;
   model: string;
@@ -42,6 +43,10 @@ export async function computeContextHash(sources: Pick<AnswerSource, "context_ha
     .join("|");
 
   return sha256Hex(stable);
+}
+
+export async function computeReceiptIntegrityHash(query: string, answer: string, blobIds: string[]) {
+  return sha256Hex(`${query}${answer}${blobIds.join(",")}`);
 }
 
 export async function listReceiptBlobs(workspaceId: string, limit = 25) {

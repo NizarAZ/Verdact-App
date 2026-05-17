@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import { ShelbyLogo } from "@/components/shelby-logo";
 import { ShelbynetStatus } from "@/components/shared/ShelbynetStatus";
+import { AppAuthGate } from "@/components/wallet/AppAuthGate";
+import { WalletButton } from "@/components/wallet/WalletButton";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <main className="app-dashboard min-h-screen">
       <header className="border-b border-base">
-        <div className="container-shell flex min-h-20 items-center justify-between gap-4 py-4">
+        <div className="mx-auto flex min-h-20 w-full max-w-[1100px] items-center justify-between gap-4 px-5 py-4">
           <Link
             href="/"
             className="flex items-center gap-3 rounded-md transition-opacity duration-150 ease-in hover:opacity-80"
@@ -22,12 +23,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-4">
             <ShelbynetStatus />
-            <UserButton afterSignOutUrl="/" />
+            <WalletButton compact />
           </div>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[1200px] px-5 py-12">{children}</div>
+      <div className="mx-auto w-full max-w-[1100px] px-5 py-8">
+        <AppAuthGate>{children}</AppAuthGate>
+      </div>
     </main>
   );
 }

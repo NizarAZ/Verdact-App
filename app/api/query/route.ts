@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { computeContextHash, type AnswerReceipt, type AnswerSource } from "@/lib/receipts";
+import { computeContextHash, computeReceiptIntegrityHash, type AnswerReceipt, type AnswerSource } from "@/lib/receipts";
 import { cosineSimilarity, getEmbedding } from "@/lib/embeddings";
-import { downloadBlobText, getAccountBlobs, uploadBlobsToShelby } from "@/lib/shelby-server";
-import { getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
+import { getLocalDocumentRecord, listLocalChunks, saveLocalAnswerReceipt } from "@/lib/local-index";
+import { downloadBlobText, getAccountBlobs } from "@/lib/shelby-server";
+import { getDocumentRecordFromShelby } from "@/lib/storage-index";
+import { getDocumentRecord } from "@/lib/supabase-server";
+import { getDocumentRecordByBlobId, insertAnswerReceiptRecord, type DocumentRecord, type ReceiptBlobReference } from "@/lib/supabase-server";
+import { getWalletAddress, normalizeWalletAddress, workspaceBlobPrefix, workspaceIdFromWalletAddress } from "@/lib/workspace";
 import { generateWithFallback } from "@/lib/llm";
 
 export const runtime = "nodejs";
@@ -21,6 +25,25 @@ type ScoredAnswerSource = AnswerSource & {
   score: number;
 };
 
+function errorText(error: unknown) {
+  if (error instanceof Error) return error.message;
+
+  if (error && typeof error === "object") {
+    const maybeError = error as { code?: unknown; message?: unknown; details?: unknown; hint?: unknown };
+    const message = typeof maybeError.message === "string" ? maybeError.message : "";
+    const details = typeof maybeError.details === "string" ? maybeError.details : "";
+    const hint = typeof maybeError.hint === "string" ? maybeError.hint : "";
+
+    if (maybeError.code === "PGRST205" || message.includes("answer_receipts")) {
+      return "Supabase is missing the answer_receipts table. Run scripts/supabase-onchain-schema.sql in Supabase, then ask again.";
+    }
+
+    return [message, details, hint].filter(Boolean).join(" ") || "Query failed.";
+  }
+
+  return "Query failed.";
+}
+
 function terms(value: string) {
   return value
     .toLowerCase()
@@ -31,6 +54,40 @@ function terms(value: string) {
 function scoreChunk(questionTerms: string[], text: string) {
   const lower = text.toLowerCase();
   return questionTerms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0);
+}
+
+async function buildBlobReferences(params: {
+  walletAddress: string;
+  workspaceId: string;
+  blobPaths: string[];
+  selectedDocument: DocumentRecord;
+}) {
+  const references: ReceiptBlobReference[] = [];
+
+  for (const path of params.blobPaths) {
+    let documentRecord: DocumentRecord | null = params.selectedDocument.blob_id === path ? params.selectedDocument : null;
+
+    if (!documentRecord) {
+      try {
+        documentRecord = await getDocumentRecordByBlobId(params.walletAddress, path);
+      } catch {
+        documentRecord = null;
+      }
+    }
+
+    if (!documentRecord) {
+      const localDocument = await getLocalDocumentRecord(params.workspaceId, params.walletAddress, params.selectedDocument.id);
+      documentRecord = localDocument?.blob_id === path ? localDocument : null;
+    }
+
+    references.push({
+      path,
+      tx_hash: documentRecord?.onchain_tx_hash ?? null,
+      file_name: documentRecord?.file_name ?? path.split("/").pop() ?? null
+    });
+  }
+
+  return references;
 }
 
 async function generateAnswer(question: string, sources: AnswerSource[]) {
@@ -61,11 +118,12 @@ Answer in one sentence:`;
 
 export async function POST(request: Request) {
   try {
-    const workspaceId = await getWorkspaceId();
-
     const body = await request.json().catch(() => ({}));
     const question = typeof body.question === "string" ? body.question.trim() : "";
     const documentId = typeof body.documentId === "string" ? body.documentId.trim() : "";
+    const bodyWalletAddress = typeof body.walletAddress === "string" ? normalizeWalletAddress(body.walletAddress) : null;
+    const walletAddress = bodyWalletAddress ?? getWalletAddress(request);
+    const workspaceId = workspaceIdFromWalletAddress(walletAddress);
 
     if (question.length < 3) {
       return NextResponse.json({ error: "Ask a longer question." }, { status: 400 });
@@ -75,17 +133,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Choose a document to ask about." }, { status: 400 });
     }
 
-    const chunkPrefix = workspaceBlobPrefix(workspaceId, "chunks");
-    const receiptPrefix = workspaceBlobPrefix(workspaceId, "receipts");
-    const chunkBlobs = (await getAccountBlobs()).filter((blob) => blob.name.startsWith(chunkPrefix)).slice(0, 120);
+    let documentRecord = null;
+    try {
+      documentRecord = await getDocumentRecord(walletAddress, documentId);
+    } catch {
+      documentRecord = null;
+    }
 
-    if (chunkBlobs.length === 0) {
-      return NextResponse.json({ error: "Upload a document before asking a question." }, { status: 400 });
+    if (!documentRecord) {
+      documentRecord =
+        (await getLocalDocumentRecord(workspaceId, walletAddress, documentId)) ??
+        (await getDocumentRecordFromShelby(workspaceId, walletAddress, documentId));
+    }
+
+    if (!documentRecord?.onchain_tx_hash) {
+      return NextResponse.json({ error: "Document is not confirmed onchain." }, { status: 404 });
     }
 
     const questionTerms = terms(question);
     const questionEmbedding = await getEmbedding(question);
-    const loadedChunks = await Promise.all(
+    const localChunks = await listLocalChunks(workspaceId, walletAddress, documentId);
+    const localLoadedChunks = localChunks.map((chunk) => {
+      const score = Array.isArray(chunk.embedding)
+        ? cosineSimilarity(questionEmbedding, chunk.embedding)
+        : scoreChunk(questionTerms, chunk.text);
+
+      return {
+        text: chunk.text,
+        context_hash: chunk.context_hash,
+        chunk_blob: chunk.chunk_blob,
+        score,
+        document_id: chunk.document_id,
+        chunk_index: chunk.chunk_index,
+        source_blob: chunk.source_blob
+      } satisfies ScoredAnswerSource;
+    });
+
+    const chunkPrefix = workspaceBlobPrefix(workspaceId, "chunks");
+    const chunkBlobs = (await getAccountBlobs()).filter((blob) => blob.name.startsWith(chunkPrefix)).slice(0, 120);
+    const shelbyLoadedChunks = await Promise.all(
       chunkBlobs.map(async (blob) => {
         try {
           const text = await downloadBlobText(blob.name);
@@ -115,7 +201,7 @@ export async function POST(request: Request) {
       })
     );
 
-    const scoredChunks = loadedChunks
+    const scoredChunks = [...localLoadedChunks, ...shelbyLoadedChunks]
       .filter((chunk): chunk is ScoredAnswerSource => chunk !== null)
       .sort((a, b) => b.score - a.score);
     console.log("similarity scores:", scoredChunks.map((chunk) => ({ index: chunk.chunk_index, score: chunk.score })));
@@ -128,12 +214,19 @@ export async function POST(request: Request) {
     }
 
     const sources = topChunks.map(({ score, ...source }) => source);
+    const blobIdsUsed = [...new Set(sources.map((source) => source.source_blob ?? source.chunk_blob))];
+    const blobsUsed = await buildBlobReferences({
+      walletAddress,
+      workspaceId,
+      blobPaths: blobIdsUsed,
+      selectedDocument: documentRecord
+    });
     const generated = await generateAnswer(question, sources);
     const receiptId = crypto.randomUUID();
     const contextHash = await computeContextHash(sources);
-    const receiptBlobName = `${receiptPrefix}${Date.now()}-${receiptId.replace(/-/g, "")}.json`;
     const receipt: AnswerReceipt = {
       receipt_id: receiptId,
+      wallet_address: walletAddress,
       question,
       answer: generated.answer,
       model: generated.model,
@@ -141,20 +234,53 @@ export async function POST(request: Request) {
       sources,
       total_chunks_retrieved: sources.length,
       context_hash: contextHash,
-      shelby_receipt_blob: receiptBlobName,
-      verified: true
+      shelby_receipt_blob: "",
+      verified: false
     };
+    const receiptHash = await computeReceiptIntegrityHash(question, generated.answer, blobIdsUsed);
 
-    await uploadBlobsToShelby([
-      {
-        blobName: receiptBlobName,
-        blobData: new TextEncoder().encode(JSON.stringify(receipt, null, 2))
-      }
-    ]);
+    let savedReceipt;
+    try {
+      savedReceipt = await insertAnswerReceiptRecord({
+        id: receiptId,
+        wallet_address: walletAddress,
+        query: question,
+        answer: generated.answer,
+        receipt_hash: receiptHash,
+        onchain_tx_hash: "",
+        blob_ids_used: blobIdsUsed,
+        blobs_used: blobsUsed,
+        receipt_blob_id: null
+      });
+    } catch (receiptError) {
+      console.error("Supabase receipt index failed", receiptError);
+      savedReceipt = {
+        id: receiptId,
+        wallet_address: walletAddress,
+        query: question,
+        answer: generated.answer,
+        receipt_hash: receiptHash,
+        onchain_tx_hash: "",
+        blob_ids_used: blobIdsUsed,
+        blobs_used: blobsUsed,
+        receipt_blob_id: null,
+        created_at: new Date().toISOString()
+      };
+      await saveLocalAnswerReceipt(workspaceId, savedReceipt);
+    }
 
-    return NextResponse.json(receipt);
+    return NextResponse.json({
+      ...receipt,
+      receipt_id: savedReceipt.id,
+      receipt_hash: receiptHash,
+      blob_ids_used: blobIdsUsed,
+      blobs_used: blobsUsed
+    });
   } catch (error) {
     console.error("Query failed", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Query failed." }, { status: 500 });
+    return NextResponse.json(
+      { error: errorText(error) },
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
+    );
   }
 }

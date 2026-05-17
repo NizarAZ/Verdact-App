@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import { useEffect, useState } from "react";
-import { BlobTag } from "@/components/shared/BlobTag";
+import { motion } from "framer-motion";
+import { useWallet } from "@/components/WalletProvider";
 
 type DocumentItem = {
   document_id?: string;
@@ -13,8 +14,12 @@ type DocumentItem = {
   text_hash?: string;
   chunk_count?: number;
   shelby_blob?: string;
+  blob_id?: string;
+  onchain_tx_hash?: string;
   metaBlobName?: string;
   creationMicros?: number | string | null;
+  created_at?: string | null;
+  versionCount?: number;
 };
 
 function formatBytes(bytes?: number) {
@@ -25,6 +30,11 @@ function formatBytes(bytes?: number) {
 }
 
 function toMillis(document: DocumentItem) {
+  if (document.created_at) {
+    const parsed = Date.parse(document.created_at);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
   if (typeof document.creationMicros === "number") {
     return Math.floor(document.creationMicros / 1000);
   }
@@ -58,68 +68,141 @@ function documentKey(document: DocumentItem) {
   return document.document_id ?? document.metaBlobName ?? document.shelby_blob ?? document.file_name ?? "document";
 }
 
+function duplicateKey(document: DocumentItem) {
+  return `${document.title ?? ""}|${document.file_name ?? ""}`.toLowerCase().trim();
+}
+
+function dedupeDocuments(documents: DocumentItem[]) {
+  const grouped = new Map<string, DocumentItem>();
+
+  for (const document of documents) {
+    const key = duplicateKey(document) || documentKey(document);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.versionCount = (existing.versionCount ?? 1) + 1;
+    } else {
+      grouped.set(key, { ...document, versionCount: 1 });
+    }
+  }
+
+  return Array.from(grouped.values());
+}
+
 export function RecentDocuments() {
+  const { address, walletFetch } = useWallet();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadDocuments() {
+      if (!address) {
+        if (mounted) setIsLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/documents?limit=4", { cache: "no-store" });
+        const response = await walletFetch("/api/documents?limit=4", { cache: "no-store" });
         const payload = (await response.json()) as DocumentItem[];
         if (mounted) setDocuments(Array.isArray(payload) ? payload : []);
       } catch {
         if (mounted) setDocuments([]);
+      } finally {
+        if (mounted) setIsLoading(false);
       }
     }
 
     loadDocuments();
 
+    const timeout = setTimeout(() => {
+      if (mounted) setIsLoading(false);
+    }, 5000);
+
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
-  }, []);
+  }, [address, walletFetch]);
 
-  if (documents.length === 0) {
-    return null;
+  if (isLoading) {
+    return (
+      <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
+        <div className="flex items-center justify-between border-b border-base p-5">
+          <h2 className="font-display text-[24px] leading-none text-text-primary">Recent documents</h2>
+        </div>
+        <div className="space-y-3 p-5">
+          <div className="h-14 w-full animate-pulse rounded-sm bg-white/5" />
+          <div className="h-14 w-full animate-pulse rounded-sm bg-white/5" />
+          <div className="h-14 w-full animate-pulse rounded-sm bg-white/5" />
+        </div>
+      </section>
+    );
   }
 
+  if (documents.length === 0) {
+    return (
+      <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
+        <div className="flex items-center justify-between border-b border-base p-5">
+          <h2 className="font-display text-[24px] leading-none text-text-primary">Recent documents</h2>
+        </div>
+        <div className="p-5 text-center">
+          <p className="font-body text-sm text-text-tertiary">
+            No documents yet.{" "}
+            <Link href="/app/upload" className="text-brand">
+              Upload your first -&gt;
+            </Link>
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const visibleDocuments = dedupeDocuments(documents);
+
   return (
-    <section className="rounded-[var(--radius-lg)] border border-base bg-bg-surface">
-      <div className="flex items-center justify-between border-b border-base p-8">
-        <h2 className="font-display text-base text-text-primary">Recent documents</h2>
+    <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
+      <div className="flex items-center justify-between border-b border-base p-5">
+        <h2 className="font-display text-[24px] leading-none text-text-primary">Recent documents</h2>
         <div className="flex items-center gap-4">
-          <Link href="/app/upload" className="font-body text-[13px] text-brand">
-            Upload
-            <span aria-hidden="true"> -&gt;</span>
+          <Link href="/app/upload" prefetch={true} className="font-body text-[13px] text-brand">
+            Upload <span aria-hidden="true">-&gt;</span>
           </Link>
-          <Link href="/app/documents" className="font-body text-[13px] text-brand">
-            View all
-            <span aria-hidden="true"> -&gt;</span>
+          <Link href="/app/documents" prefetch={true} className="font-body text-[13px] text-brand">
+            View all <span aria-hidden="true">-&gt;</span>
           </Link>
         </div>
       </div>
 
       <div>
-        {documents.map((document) => (
-          <Link
+        {visibleDocuments.map((document, index) => (
+          <motion.div
             key={documentKey(document)}
-            href="/app/documents"
-            className="group grid gap-3 border-b border-base p-8 transition-colors duration-150 ease-in last:border-b-0 hover:bg-bg-surface md:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] md:items-center"
+            initial={{ opacity: 0, x: -14 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, delay: index * 0.04, ease: "easeOut" }}
           >
-            <span className="flex min-w-0 items-center gap-3">
-              <FileText className="h-4 w-4 shrink-0 text-brand" />
-              <span className="min-w-0">
-                <span className="block truncate font-body text-sm text-text-primary">{document.title ?? document.file_name ?? "Untitled document"}</span>
-                <span className="mt-1 block truncate font-body text-xs text-text-tertiary">{document.file_name ?? "Shelby document"}</span>
+            <Link
+              href="/app/documents"
+              className="grid gap-3 border-b border-base p-5 transition-colors duration-150 ease-in last:border-b-0 hover:bg-white/[0.035] md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <FileText className="h-4 w-4 shrink-0 text-brand" />
+                <span className="min-w-0">
+                  <span className="block truncate font-body text-sm text-text-primary">
+                    {document.title ?? document.file_name ?? "Untitled document"}
+                    {(document.versionCount ?? 1) > 1 ? <span className="text-text-tertiary"> ({document.versionCount} versions)</span> : null}
+                  </span>
+                  <span className="mt-1 block truncate font-body text-xs text-text-tertiary">{document.file_name ?? "Shelby document"}</span>
+                </span>
               </span>
-            </span>
-            <BlobTag value={`${document.chunk_count ?? 0} chunks`} />
-            <span className="font-mono text-xs text-text-tertiary">{formatBytes(document.size)}</span>
-            <span className="font-mono text-xs text-text-tertiary">{relativeTime(document)}</span>
-            <ArrowRight className="hidden h-4 w-4 text-text-tertiary opacity-0 transition-opacity duration-150 ease-in group-hover:opacity-100 md:block" />
-          </Link>
+              <span className="inline-flex w-fit items-center rounded-sm border border-base bg-white/[0.03] px-2 py-1 font-mono text-xs text-text-secondary">
+                {document.chunk_count ?? 0} chunks
+              </span>
+              <span className="font-mono text-xs text-text-tertiary">{formatBytes(document.size)}</span>
+              <span className="font-mono text-xs text-text-tertiary">{relativeTime(document)}</span>
+            </Link>
+          </motion.div>
         ))}
       </div>
     </section>

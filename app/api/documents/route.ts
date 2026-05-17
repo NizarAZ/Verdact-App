@@ -1,30 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { downloadBlobText, getAccountBlobs } from "@/lib/shelby-server";
-import { getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
+import { listLocalDocumentRecords } from "@/lib/local-index";
+import { listDocumentRecordsFromShelby } from "@/lib/storage-index";
+import { listDocumentRecords } from "@/lib/supabase-server";
+import { getWalletAddress, getWorkspaceId } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type StoredDocumentMeta = {
-  document_id?: string;
-  title?: string;
-  file_name?: string;
-  content_type?: string;
-  size?: number;
-  text_hash?: string;
-  chunk_count?: number;
-  shelby_blob?: string;
-  created_at?: string;
-};
-
-function toMicros(value: number | string | null | undefined) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
 
 function readLimit(request: NextRequest) {
   const raw = Number(request.nextUrl.searchParams.get("limit") ?? "6");
@@ -33,40 +14,47 @@ function readLimit(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const workspaceId = await getWorkspaceId();
-
-  const limit = readLimit(request);
-
   try {
-    const documentsPrefix = workspaceBlobPrefix(workspaceId, "documents");
-    const metaBlobs = (await getAccountBlobs())
-      .filter((blob) => blob.name.startsWith(documentsPrefix) && blob.name.endsWith("/meta.json"))
-      .sort((a, b) => (toMicros(b.creationMicros) ?? 0) - (toMicros(a.creationMicros) ?? 0))
-      .slice(0, limit);
+    const walletAddress = getWalletAddress(request);
+    const workspaceId = await getWorkspaceId(request);
+    const [documents, localDocuments] = await Promise.all([
+      listDocumentRecords(walletAddress, readLimit(request)),
+      listLocalDocumentRecords(workspaceId, walletAddress, readLimit(request))
+    ]);
+    const mergedDocuments = [
+      ...localDocuments,
+      ...documents.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
+    ].slice(0, readLimit(request));
 
-    const documents = await Promise.all(
-      metaBlobs.map(async (blob) => {
-        try {
-          const text = await downloadBlobText(blob.name);
-          if (!text) return null;
-
-          const parsed = JSON.parse(text) as StoredDocumentMeta;
-
-          return {
-            ...parsed,
-            metaBlobName: blob.name,
-            creationMicros: blob.creationMicros
-          };
-        } catch (error) {
-          console.error("Failed to parse document metadata blob", blob.name, error);
-          return null;
-        }
-      })
+    return NextResponse.json(
+      mergedDocuments.map((document) => ({
+        ...document,
+        document_id: document.id,
+        shelby_blob: document.blob_id
+      }))
     );
-
-    return NextResponse.json(documents.filter((document) => document !== null));
   } catch (error) {
-    console.error("Failed to load Shelby documents", error);
-    return NextResponse.json([]);
+    console.error("Failed to load documents", error);
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const walletAddress = getWalletAddress(request);
+    const workspaceId = await getWorkspaceId(request);
+    const [localDocuments, shelbyDocuments] = await Promise.all([
+      listLocalDocumentRecords(workspaceId, walletAddress, readLimit(request)),
+      listDocumentRecordsFromShelby(workspaceId, walletAddress, readLimit(request))
+    ]);
+    const documents = [
+      ...localDocuments,
+      ...shelbyDocuments.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
+    ].slice(0, readLimit(request));
+    return NextResponse.json(
+      documents.map((document) => ({
+        ...document,
+        document_id: document.id,
+        shelby_blob: document.blob_id
+      }))
+    );
   }
 }

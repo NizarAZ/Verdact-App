@@ -1,33 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { downloadBlobText, getAccountBlobs } from "@/lib/shelby-server";
-import { getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
+import { listLocalAnswerReceipts } from "@/lib/local-index";
+import { listAnswerReceiptRecords } from "@/lib/supabase-server";
+import { getWalletAddress, getWorkspaceId } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-export type AnswerReceipt = {
-  receipt_id?: string;
-  id?: string;
-  question?: string;
-  answer?: string;
-  model?: string;
-  timestamp?: number;
-  sources?: unknown[];
-  total_chunks_retrieved?: number;
-  context_hash?: string;
-  shelby_receipt_blob?: string;
-  blobName?: string;
-  creationMicros?: number | string | null;
-};
-
-function toMicros(value: number | string | null | undefined) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
 
 function readLimit(request: NextRequest) {
   const raw = Number(request.nextUrl.searchParams.get("limit") ?? "3");
@@ -36,39 +13,54 @@ function readLimit(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const workspaceId = await getWorkspaceId();
-
-  const limit = readLimit(request);
-
   try {
-    const receiptsPrefix = workspaceBlobPrefix(workspaceId, "receipts");
-    const receiptBlobs = (await getAccountBlobs())
-      .filter((blob) => blob.name.startsWith(receiptsPrefix))
-      .sort((a, b) => (toMicros(b.creationMicros) ?? 0) - (toMicros(a.creationMicros) ?? 0))
-      .slice(0, limit);
+    const walletAddress = getWalletAddress(request);
+    const workspaceId = await getWorkspaceId(request);
+    const [receipts, localReceipts] = await Promise.all([
+      listAnswerReceiptRecords(walletAddress, readLimit(request)),
+      listLocalAnswerReceipts(workspaceId, walletAddress, readLimit(request))
+    ]);
+    const mergedReceipts = [
+      ...localReceipts,
+      ...receipts.filter((receipt) => !localReceipts.some((localReceipt) => localReceipt.id === receipt.id))
+    ].slice(0, readLimit(request));
 
-    const receipts = await Promise.all(
-      receiptBlobs.map(async (blob) => {
-        try {
-          const text = await downloadBlobText(blob.name);
-          if (!text) return null;
-
-          const parsed = JSON.parse(text) as AnswerReceipt;
-          return {
-            ...parsed,
-            blobName: blob.name,
-            creationMicros: blob.creationMicros
-          };
-        } catch (error) {
-          console.error("Failed to parse receipt blob", blob.name, error);
-          return null;
-        }
-      })
+    return NextResponse.json(
+      mergedReceipts.map((receipt) => ({
+        receipt_id: receipt.id ?? receipt.receipt_hash,
+        question: receipt.query,
+        answer: receipt.answer,
+        receipt_hash: receipt.receipt_hash,
+        onchain_tx_hash: receipt.onchain_tx_hash,
+        sources: receipt.blob_ids_used.map((blobId) => ({ chunk_blob: blobId })),
+        context_hash: receipt.receipt_hash,
+        verified: Boolean(receipt.receipt_hash),
+        blobName: receipt.receipt_blob_id,
+        created_at: receipt.created_at
+      }))
     );
-
-    return NextResponse.json(receipts.filter((receipt) => receipt !== null));
   } catch (error) {
-    console.error("Failed to load Shelby receipts", error);
-    return NextResponse.json([]);
+    console.error("Failed to load receipts", error);
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const walletAddress = getWalletAddress(request);
+    const workspaceId = await getWorkspaceId(request);
+    const receipts = await listLocalAnswerReceipts(workspaceId, walletAddress, readLimit(request));
+    return NextResponse.json(
+      receipts.map((receipt) => ({
+        receipt_id: receipt.id ?? receipt.receipt_hash,
+        question: receipt.query,
+        answer: receipt.answer,
+        receipt_hash: receipt.receipt_hash,
+        onchain_tx_hash: receipt.onchain_tx_hash,
+        sources: receipt.blob_ids_used.map((blobId) => ({ chunk_blob: blobId })),
+        context_hash: receipt.receipt_hash,
+        verified: Boolean(receipt.receipt_hash),
+        blobName: receipt.receipt_blob_id,
+        created_at: receipt.created_at
+      }))
+    );
   }
 }

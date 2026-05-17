@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { BlobTag } from "@/components/shared/BlobTag";
+import { useWallet } from "@/components/WalletProvider";
 
 type DocumentItem = {
   document_id?: string;
@@ -12,8 +13,11 @@ type DocumentItem = {
   file_name?: string;
   size?: number;
   text_hash?: string;
+  file_hash?: string;
   chunk_count?: number;
   shelby_blob?: string;
+  blob_id?: string;
+  onchain_tx_hash?: string;
   metaBlobName?: string;
   creationMicros?: number | string | null;
 };
@@ -35,6 +39,7 @@ function documentKey(document: DocumentItem) {
 }
 
 export function DocumentsArchive() {
+  const { address, walletFetch } = useWallet();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,8 +47,14 @@ export function DocumentsArchive() {
     let mounted = true;
 
     async function loadDocuments() {
+      // Guard: don't fetch until wallet is connected
+      if (!address) {
+        if (mounted) setLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/documents?limit=50", { cache: "no-store" });
+        const response = await walletFetch("/api/documents?limit=50", { cache: "no-store" });
         const payload = (await response.json()) as DocumentItem[];
         if (mounted) setDocuments(Array.isArray(payload) ? payload : []);
       } catch {
@@ -55,10 +66,16 @@ export function DocumentsArchive() {
 
     loadDocuments();
 
+    // Timeout fallback: force loading to false after 5 seconds
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
     return () => {
       mounted = false;
+      clearTimeout(timeout);
     };
-  }, []);
+  }, [address, walletFetch]);
 
   return (
     <div>
@@ -103,18 +120,28 @@ export function DocumentsArchive() {
             {documents.map((document) => (
               <div
                 key={documentKey(document)}
-                className="grid gap-3 border-b border-base p-8 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center"
+                className="grid gap-3 border-b border-base p-8 last:border-b-0 md:grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] md:items-center"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <FileText className="h-4 w-4 shrink-0 text-brand" />
                   <div className="min-w-0">
                     <p className="truncate font-body text-sm text-text-primary">{document.title ?? document.file_name ?? "Untitled document"}</p>
-                    <p className="mt-1 truncate font-body text-xs text-text-tertiary">{document.shelby_blob ?? document.metaBlobName}</p>
+                    <p className="mt-1 truncate font-body text-xs text-text-tertiary">{document.blob_id ?? document.shelby_blob ?? document.metaBlobName}</p>
                   </div>
                 </div>
                 <BlobTag value={`${document.chunk_count ?? 0} chunks`} />
+                <BlobTag value={shortHash(document.blob_id ?? document.shelby_blob)} />
                 <span className="font-mono text-xs text-text-tertiary">{formatBytes(document.size)}</span>
-                <span className="font-mono text-xs text-text-tertiary">{shortHash(document.text_hash)}</span>
+                {document.onchain_tx_hash ? (
+                  <a
+                    href={`https://explorer.aptoslabs.com/txn/${encodeURIComponent(document.onchain_tx_hash)}?network=shelbynet`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs text-brand"
+                  >
+                    View onchain
+                  </a>
+                ) : null}
               </div>
             ))}
           </div>
