@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
-import { getLocalAnswerReceipt } from "@/lib/local-index";
 import { getAnswerReceiptById } from "@/lib/supabase-server";
-import { getWorkspaceId } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const workspaceId = await getWorkspaceId(request);
-    let receipt = await getLocalAnswerReceipt(workspaceId, decodeURIComponent(params.id));
-
-    if (!receipt) {
-      receipt = await getAnswerReceiptById(decodeURIComponent(params.id));
-    }
+    const receipt = await getAnswerReceiptById(decodeURIComponent(params.id));
 
     if (!receipt) {
       return NextResponse.json({ error: "Receipt not found." }, { status: 404 });

@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "screenshots": "playwright test"
+    "screenshots": "playwright test",
+    "vercel-install": "npm install --legacy-peer-deps"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^6.3.1",

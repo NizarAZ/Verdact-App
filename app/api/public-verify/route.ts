@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computeReceiptIntegrityHash } from "@/lib/receipts";
-import { findLocalAnswerReceipt } from "@/lib/local-index";
 import { getAnswerReceiptById } from "@/lib/supabase-server";
 import type { ReceiptBlobReference } from "@/lib/supabase-server";
 
@@ -32,11 +31,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing receipt id." }, { status: 400 });
     }
 
-    let receipt = await findLocalAnswerReceipt(id);
-
-    if (!receipt) {
-      receipt = await getAnswerReceiptById(id);
-    }
+    const receipt = await getAnswerReceiptById(id);
 
     if (!receipt) {
       return NextResponse.json({ error: "Receipt not found." }, { status: 404 });

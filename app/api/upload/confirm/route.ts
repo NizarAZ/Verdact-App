@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { chunkDocument, isSupportedUpload, readFileText, sanitizeBlobSegment, sha256Hex } from "@/lib/document-processing";
 import { getEmbedding } from "@/lib/embeddings";
-import { saveLocalChunks, saveLocalDocumentRecord } from "@/lib/local-index";
 import { waitForTransaction } from "@/lib/onchain";
 import type { DocumentRecord } from "@/lib/supabase-server";
 import { insertDocumentRecord } from "@/lib/supabase-server";
@@ -156,25 +155,8 @@ export async function POST(request: Request) {
       ]);
     } catch (shelbyIndexError) {
       console.error("Shelby metadata index write failed", shelbyIndexError);
-      metadataWarning = "Shelby metadata indexing failed, using local confirmed index.";
+      metadataWarning = "Shelby chunk indexing failed; document is onchain but may not be queryable until Shelby indexing is retried.";
     }
-
-    await saveLocalDocumentRecord(workspaceId, documentRecord);
-    await saveLocalChunks(
-      workspaceId,
-      documentId,
-      chunkPayloads.map((chunk) => ({
-        document_id: documentId,
-        wallet_address: walletAddress,
-        text: chunk.payload.text,
-        context_hash: chunk.payload.context_hash,
-        chunk_blob: chunk.blobName,
-        source_blob: originalBlobName,
-        chunk_index: chunk.payload.chunk_index,
-        embedding: chunk.payload.embedding,
-        created_at: now
-      }))
-    );
 
     try {
       await insertDocumentRecord(documentRecord);

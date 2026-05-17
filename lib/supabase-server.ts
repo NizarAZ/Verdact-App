@@ -51,7 +51,7 @@ export function getSupabaseAdmin() {
 
 export async function insertDocumentRecord(record: DocumentRecord) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("documents").insert(record);
+  const { error } = await supabase.from("documents").upsert(record, { onConflict: "id" });
 
   if (error) throw error;
 }

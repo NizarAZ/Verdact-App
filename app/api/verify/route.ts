@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { computeReceiptIntegrityHash } from "@/lib/receipts";
-import { getLocalAnswerReceipt } from "@/lib/local-index";
 import { getAnswerReceiptById } from "@/lib/supabase-server";
-import { getWorkspaceId } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,12 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Paste a receipt id." }, { status: 400 });
     }
 
-    const workspaceId = await getWorkspaceId(request);
-    let receipt = await getLocalAnswerReceipt(workspaceId, receiptId);
-
-    if (!receipt) {
-      receipt = await getAnswerReceiptById(receiptId);
-    }
+    const receipt = await getAnswerReceiptById(receiptId);
 
     if (!receipt) {
       return NextResponse.json({ error: "Receipt not found." }, { status: 404 });

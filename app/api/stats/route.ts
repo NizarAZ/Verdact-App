@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { listLocalAnswerReceipts, listLocalDocumentRecords } from "@/lib/local-index";
 import { getServerAccountAddress } from "@/lib/shelby-server";
 import { listDocumentRecordsFromShelby } from "@/lib/storage-index";
 import { listAnswerReceiptRecords, listDocumentRecords } from "@/lib/supabase-server";
@@ -26,31 +25,21 @@ export async function GET(request: Request) {
   try {
     const walletAddress = getWalletAddress(request);
     const workspaceId = await getWorkspaceId(request);
-    const [documents, receipts, localDocuments, localReceipts] = await Promise.all([
+    const [documents, receipts] = await Promise.all([
       listDocumentRecords(walletAddress, 500),
-      listAnswerReceiptRecords(walletAddress, 500),
-      listLocalDocumentRecords(workspaceId, walletAddress, 500),
-      listLocalAnswerReceipts(workspaceId, walletAddress, 500)
+      listAnswerReceiptRecords(walletAddress, 500)
     ]);
-    const mergedDocuments = [
-      ...localDocuments,
-      ...documents.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
-    ];
-    const mergedReceipts = [
-      ...localReceipts,
-      ...receipts.filter((receipt) => !localReceipts.some((localReceipt) => localReceipt.id === receipt.id))
-    ];
-    const chunks = mergedDocuments.reduce((total, document) => total + (document.chunk_count ?? 0), 0);
+    const chunks = documents.reduce((total, document) => total + (document.chunk_count ?? 0), 0);
     const lastActivityAt = latestActivityIso([
-      ...mergedDocuments.map((item) => item.created_at),
-      ...mergedReceipts.map((item) => item.created_at)
+      ...documents.map((item) => item.created_at),
+      ...receipts.map((item) => item.created_at)
     ]);
 
     return NextResponse.json({
-      documents: mergedDocuments.length,
+      documents: documents.length,
       chunks,
-      receipts: mergedReceipts.length,
-      onchainRegistrations: mergedDocuments.length,
+      receipts: receipts.length,
+      onchainRegistrations: documents.length,
       lastActivityAt,
       lastActivityMicros: lastActivityAt ? Date.parse(lastActivityAt) * 1000 : null,
       accountAddress,
@@ -66,14 +55,7 @@ export async function GET(request: Request) {
     try {
       const walletAddress = getWalletAddress(request);
       const workspaceId = await getWorkspaceId(request);
-      const [localDocuments, shelbyDocuments] = await Promise.all([
-        listLocalDocumentRecords(workspaceId, walletAddress, 500),
-        listDocumentRecordsFromShelby(workspaceId, walletAddress, 500)
-      ]);
-      const documents = [
-        ...localDocuments,
-        ...shelbyDocuments.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
-      ];
+      const documents = await listDocumentRecordsFromShelby(workspaceId, walletAddress, 500);
       const chunks = documents.reduce((total, document) => total + (document.chunk_count ?? 0), 0);
       const lastActivityAt = latestActivityIso(documents.map((item) => item.created_at));
 

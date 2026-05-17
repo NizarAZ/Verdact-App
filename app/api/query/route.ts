@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { computeContextHash, computeReceiptIntegrityHash, type AnswerReceipt, type AnswerSource } from "@/lib/receipts";
 import { cosineSimilarity, getEmbedding } from "@/lib/embeddings";
-import { getLocalDocumentRecord, listLocalChunks, saveLocalAnswerReceipt } from "@/lib/local-index";
 import { downloadBlobText, getAccountBlobs } from "@/lib/shelby-server";
 import { getDocumentRecordFromShelby } from "@/lib/storage-index";
 import { getDocumentRecord } from "@/lib/supabase-server";
@@ -58,7 +57,6 @@ function scoreChunk(questionTerms: string[], text: string) {
 
 async function buildBlobReferences(params: {
   walletAddress: string;
-  workspaceId: string;
   blobPaths: string[];
   selectedDocument: DocumentRecord;
 }) {
@@ -73,11 +71,6 @@ async function buildBlobReferences(params: {
       } catch {
         documentRecord = null;
       }
-    }
-
-    if (!documentRecord) {
-      const localDocument = await getLocalDocumentRecord(params.workspaceId, params.walletAddress, params.selectedDocument.id);
-      documentRecord = localDocument?.blob_id === path ? localDocument : null;
     }
 
     references.push({
@@ -142,8 +135,7 @@ export async function POST(request: Request) {
 
     if (!documentRecord) {
       documentRecord =
-        (await getLocalDocumentRecord(workspaceId, walletAddress, documentId)) ??
-        (await getDocumentRecordFromShelby(workspaceId, walletAddress, documentId));
+        await getDocumentRecordFromShelby(workspaceId, walletAddress, documentId);
     }
 
     if (!documentRecord?.onchain_tx_hash) {
@@ -152,23 +144,6 @@ export async function POST(request: Request) {
 
     const questionTerms = terms(question);
     const questionEmbedding = await getEmbedding(question);
-    const localChunks = await listLocalChunks(workspaceId, walletAddress, documentId);
-    const localLoadedChunks = localChunks.map((chunk) => {
-      const score = Array.isArray(chunk.embedding)
-        ? cosineSimilarity(questionEmbedding, chunk.embedding)
-        : scoreChunk(questionTerms, chunk.text);
-
-      return {
-        text: chunk.text,
-        context_hash: chunk.context_hash,
-        chunk_blob: chunk.chunk_blob,
-        score,
-        document_id: chunk.document_id,
-        chunk_index: chunk.chunk_index,
-        source_blob: chunk.source_blob
-      } satisfies ScoredAnswerSource;
-    });
-
     const chunkPrefix = workspaceBlobPrefix(workspaceId, "chunks");
     const chunkBlobs = (await getAccountBlobs()).filter((blob) => blob.name.startsWith(chunkPrefix)).slice(0, 120);
     const shelbyLoadedChunks = await Promise.all(
@@ -201,7 +176,7 @@ export async function POST(request: Request) {
       })
     );
 
-    const scoredChunks = [...localLoadedChunks, ...shelbyLoadedChunks]
+    const scoredChunks = shelbyLoadedChunks
       .filter((chunk): chunk is ScoredAnswerSource => chunk !== null)
       .sort((a, b) => b.score - a.score);
     console.log("similarity scores:", scoredChunks.map((chunk) => ({ index: chunk.chunk_index, score: chunk.score })));
@@ -217,7 +192,6 @@ export async function POST(request: Request) {
     const blobIdsUsed = [...new Set(sources.map((source) => source.source_blob ?? source.chunk_blob))];
     const blobsUsed = await buildBlobReferences({
       walletAddress,
-      workspaceId,
       blobPaths: blobIdsUsed,
       selectedDocument: documentRecord
     });
@@ -266,7 +240,6 @@ export async function POST(request: Request) {
         receipt_blob_id: null,
         created_at: new Date().toISOString()
       };
-      await saveLocalAnswerReceipt(workspaceId, savedReceipt);
     }
 
     return NextResponse.json({

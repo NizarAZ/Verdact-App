@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listLocalDocumentRecords } from "@/lib/local-index";
 import { listDocumentRecordsFromShelby } from "@/lib/storage-index";
 import { listDocumentRecords } from "@/lib/supabase-server";
 import { getWalletAddress, getWorkspaceId } from "@/lib/workspace";
@@ -16,18 +15,10 @@ function readLimit(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const walletAddress = getWalletAddress(request);
-    const workspaceId = await getWorkspaceId(request);
-    const [documents, localDocuments] = await Promise.all([
-      listDocumentRecords(walletAddress, readLimit(request)),
-      listLocalDocumentRecords(workspaceId, walletAddress, readLimit(request))
-    ]);
-    const mergedDocuments = [
-      ...localDocuments,
-      ...documents.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
-    ].slice(0, readLimit(request));
+    const documents = await listDocumentRecords(walletAddress, readLimit(request));
 
     return NextResponse.json(
-      mergedDocuments.map((document) => ({
+      documents.map((document) => ({
         ...document,
         document_id: document.id,
         shelby_blob: document.blob_id
@@ -41,14 +32,7 @@ export async function GET(request: NextRequest) {
 
     const walletAddress = getWalletAddress(request);
     const workspaceId = await getWorkspaceId(request);
-    const [localDocuments, shelbyDocuments] = await Promise.all([
-      listLocalDocumentRecords(workspaceId, walletAddress, readLimit(request)),
-      listDocumentRecordsFromShelby(workspaceId, walletAddress, readLimit(request))
-    ]);
-    const documents = [
-      ...localDocuments,
-      ...shelbyDocuments.filter((document) => !localDocuments.some((localDocument) => localDocument.id === document.id))
-    ].slice(0, readLimit(request));
+    const documents = await listDocumentRecordsFromShelby(workspaceId, walletAddress, readLimit(request));
     return NextResponse.json(
       documents.map((document) => ({
         ...document,
