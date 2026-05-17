@@ -25,8 +25,12 @@ export async function POST(request: Request) {
   try {
     const workspaceId = await getWorkspaceId(request);
     const form = await request.formData();
-    const walletAddressFromBody = typeof form.get("walletAddress") === "string" ? String(form.get("walletAddress")) : "";
-    const walletAddress = walletAddressFromBody || getWalletAddress(request);
+    const walletAddress = typeof form.get("walletAddress") === "string" ? String(form.get("walletAddress")) : "";
+
+    if (!walletAddress) {
+      return NextResponse.json({ error: "Wallet address is required." }, { status: 400 });
+    }
+
     const file = form.get("file");
     const titleValue = form.get("title");
     const documentId = typeof form.get("documentId") === "string" ? String(form.get("documentId")) : "";
