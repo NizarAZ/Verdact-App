@@ -57,7 +57,7 @@ export function UploadFlow() {
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const derivedTitle = useMemo(() => title || file?.name.replace(/\.[^.]+$/, "") || "", [file, title]);
-  const canSubmit = Boolean(file && !["uploading", "signing", "confirming"].includes(status));
+  const canSubmit = Boolean(address && file && !["uploading", "signing", "confirming"].includes(status));
   const blobUrl = address && result?.blobId
     ? `${process.env.NEXT_PUBLIC_SHELBY_RPC_URL || "https://api.shelbynet.shelby.xyz/shelby"}/v1/blobs/${encodeURIComponent(address)}/${result.blobId
         .split("/")
@@ -119,7 +119,6 @@ export function UploadFlow() {
     const form = new FormData();
     form.append("file", file);
     form.append("title", derivedTitle);
-    form.append("walletAddress", address || "");
 
     try {
       const response = await walletFetch("/api/upload", {
@@ -145,7 +144,6 @@ export function UploadFlow() {
       confirmForm.append("blobId", payload.blobId);
       confirmForm.append("fileHash", payload.fileHash);
       confirmForm.append("onchainTxHash", nextTxHash);
-      confirmForm.append("walletAddress", address || "");
 
       const confirmResponse = await walletFetch("/api/upload/confirm", {
         method: "POST",

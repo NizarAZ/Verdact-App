@@ -93,7 +93,7 @@ export function QueryFlow() {
       const response = await walletFetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, documentId, walletAddress: address })
+        body: JSON.stringify({ question, documentId })
       });
       const payload = await response.json();
 

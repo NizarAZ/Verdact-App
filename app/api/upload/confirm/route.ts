@@ -4,7 +4,7 @@ import { getEmbedding } from "@/lib/embeddings";
 import { waitForTransaction } from "@/lib/onchain";
 import type { DocumentRecord } from "@/lib/supabase-server";
 import { insertDocumentRecord } from "@/lib/supabase-server";
-import { downloadWalletBlobBytes, getServerAccountAddress, putWalletBlob, uploadBlobsToShelby } from "@/lib/shelby-server";
+import { downloadWalletBlobBytes, putWalletBlob, uploadBlobsToShelby } from "@/lib/shelby-server";
 import { getWalletAddress, getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -24,12 +24,8 @@ function formatDocumentIndexWarning(error: unknown) {
 export async function POST(request: Request) {
   try {
     const workspaceId = await getWorkspaceId(request);
+    const walletAddress = getWalletAddress(request);
     const form = await request.formData();
-    const walletAddress = typeof form.get("walletAddress") === "string" ? String(form.get("walletAddress")) : "";
-
-    if (!walletAddress) {
-      return NextResponse.json({ error: "Wallet address is required." }, { status: 400 });
-    }
 
     const file = form.get("file");
     const titleValue = form.get("title");
@@ -97,7 +93,6 @@ export async function POST(request: Request) {
     const metaBlobName = `${documentPrefix}${compactDocumentId}/meta.json`;
     const textHash = await sha256Hex(text);
     const now = new Date().toISOString();
-    const accountAddress = getServerAccountAddress();
 
     const meta = {
       document_id: documentId,
@@ -110,7 +105,6 @@ export async function POST(request: Request) {
       file_hash: fileHash,
       text_hash: textHash,
       chunk_count: chunks.length,
-      shelby_account: accountAddress,
       shelby_blob: originalBlobName,
       blob_id: blobId,
       onchain_tx_hash: onchainTxHash,

@@ -12,15 +12,13 @@ type StatsResponse = {
   onchainRegistrations?: number;
   lastActivityAt?: string | null;
   lastActivityMicros: number | null;
-  accountAddress: string | null;
 };
 
 const emptyStats: StatsResponse = {
   documents: 0,
   chunks: 0,
   receipts: 0,
-  lastActivityMicros: null,
-  accountAddress: null
+  lastActivityMicros: null
 };
 
 function timeAgo(dateString?: string | null) {
@@ -39,12 +37,6 @@ function timeAgo(dateString?: string | null) {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   return `${days}d ago`;
-}
-
-function truncateAddress(address: string | null) {
-  if (!address) return "not configured";
-  if (address.length <= 14) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 function useCountUp(value: number, ready: boolean) {
@@ -95,7 +87,7 @@ export function StatsPanel() {
       }
 
       try {
-        const response = await walletFetch(`/api/stats?wallet=${address}`, { cache: "no-store" });
+        const response = await walletFetch("/api/stats", { cache: "no-store" });
         const payload = (await response.json()) as StatsResponse;
         if (mounted) setStats({ ...emptyStats, ...payload });
       } catch {

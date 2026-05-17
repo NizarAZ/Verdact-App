@@ -2,13 +2,15 @@
 
 import { LogOut, Wallet } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
+import { normalizeWalletAddress } from "@/lib/workspace";
 
 function shorten(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { address, connect, disconnect, isConnecting, isConnected } = useWallet();
+  const { account, connect, disconnect, isConnecting, isConnected } = useWallet();
+  const address = normalizeWalletAddress(account?.address?.toString());
 
   if (isConnected && address) {
     return (

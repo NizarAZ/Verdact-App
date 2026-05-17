@@ -72,7 +72,7 @@ const proofCurveNodes = [
 
 const receiptFields = [
   ["receipt_id", "8f1a1b97-5d4a-46f2-b71f-5e92"],
-  ["wallet_address", "0x840343...9300"],
+  ["wallet_address", "connected Petra wallet"],
   ["receipt_hash", "91af7d2c5e90b6fb...c1e4429a"],
   ["source_tx_hash", "0x85fdb9a176ab...bb4988e6"],
   ["blob_name", "prompt-for-codex.pdf"],

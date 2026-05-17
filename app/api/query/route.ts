@@ -5,7 +5,7 @@ import { downloadBlobText, getAccountBlobs } from "@/lib/shelby-server";
 import { getDocumentRecordFromShelby } from "@/lib/storage-index";
 import { getDocumentRecord } from "@/lib/supabase-server";
 import { getDocumentRecordByBlobId, insertAnswerReceiptRecord, type DocumentRecord, type ReceiptBlobReference } from "@/lib/supabase-server";
-import { getWalletAddress, normalizeWalletAddress, workspaceBlobPrefix, workspaceIdFromWalletAddress } from "@/lib/workspace";
+import { getWalletAddress, workspaceBlobPrefix, workspaceIdFromWalletAddress } from "@/lib/workspace";
 import { generateWithFallback } from "@/lib/llm";
 
 export const runtime = "nodejs";
@@ -114,8 +114,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const question = typeof body.question === "string" ? body.question.trim() : "";
     const documentId = typeof body.documentId === "string" ? body.documentId.trim() : "";
-    const bodyWalletAddress = typeof body.walletAddress === "string" ? normalizeWalletAddress(body.walletAddress) : null;
-    const walletAddress = bodyWalletAddress ?? getWalletAddress(request);
+    const walletAddress = getWalletAddress(request);
     const workspaceId = workspaceIdFromWalletAddress(walletAddress);
 
     if (question.length < 3) {

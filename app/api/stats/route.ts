@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getServerAccountAddress } from "@/lib/shelby-server";
 import { listDocumentRecordsFromShelby } from "@/lib/storage-index";
 import { listAnswerReceiptRecords, listDocumentRecords } from "@/lib/supabase-server";
 import { getWalletAddress, getWorkspaceId } from "@/lib/workspace";
@@ -20,12 +19,8 @@ function latestActivityIso(values: (string | null | undefined)[]) {
 }
 
 export async function GET(request: Request) {
-  const accountAddress = getServerAccountAddress();
-  const { searchParams } = new URL(request.url);
-  const walletAddressFromQuery = searchParams.get("wallet");
-
   try {
-    const walletAddress = walletAddressFromQuery || getWalletAddress(request);
+    const walletAddress = getWalletAddress(request);
     const workspaceId = await getWorkspaceId(request);
     const [documents, receipts] = await Promise.all([
       listDocumentRecords(walletAddress, 500),
@@ -44,7 +39,6 @@ export async function GET(request: Request) {
       onchainRegistrations: documents.length,
       lastActivityAt,
       lastActivityMicros: lastActivityAt ? Date.parse(lastActivityAt) * 1000 : null,
-      accountAddress,
       workspaceId
     });
   } catch (error) {
@@ -68,7 +62,6 @@ export async function GET(request: Request) {
         onchainRegistrations: documents.length,
         lastActivityAt,
         lastActivityMicros: lastActivityAt ? Date.parse(lastActivityAt) * 1000 : null,
-        accountAddress,
         workspaceId
       });
     } catch (fallbackError) {
@@ -81,8 +74,7 @@ export async function GET(request: Request) {
       receipts: 0,
       onchainRegistrations: 0,
       lastActivityAt: null,
-      lastActivityMicros: null,
-      accountAddress
+      lastActivityMicros: null
     });
   }
 }

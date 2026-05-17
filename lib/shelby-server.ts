@@ -28,11 +28,6 @@ export function getServerAccount() {
   });
 }
 
-export function getServerAccountAddress() {
-  const account = getServerAccount();
-  return account?.accountAddress.toString() ?? null;
-}
-
 export function getShelbyClient() {
   const apiKey = readServerEnv("SHELBY_API_KEY");
   const faucetAuthToken = readServerEnv("SHELBY_FAUCET_AUTH_TOKEN");
@@ -95,23 +90,23 @@ export async function ensureServerFunding() {
   const shelbyUsdBalance = await getShelbyUsdBalance(client, address);
 
   if (aptBalance < minAptOctas) {
-    throw new Error(`Server Shelby account ${address} needs APT for transaction fees.`);
+    throw new Error("Shelby storage account needs APT for transaction fees.");
   }
 
   if (shelbyUsdBalance < minShelbyUsdUnits) {
-    throw new Error(`Server Shelby account ${address} needs ShelbyUSD storage funds.`);
+    throw new Error("Shelby storage account needs ShelbyUSD storage funds.");
   }
 }
 
-function normalizeShelbyUploadError(error: unknown, address: string) {
+function normalizeShelbyUploadError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
 
   if (message.includes("INSUFFICIENT_BALANCE_FOR_TRANSACTION_FEE")) {
-    return new Error(`Server Shelby account ${address} needs more APT for transaction fees.`);
+    return new Error("Shelby storage account needs more APT for transaction fees.");
   }
 
   if (message.includes("E_INSUFFICIENT_FUNDS") || message.includes("blob storage")) {
-    return new Error(`Server Shelby account ${address} needs more ShelbyUSD storage funds.`);
+    return new Error("Shelby storage account needs more ShelbyUSD storage funds.");
   }
 
   if (
@@ -221,14 +216,14 @@ export async function putWalletBlob(params: {
       lastError = error;
 
       if (!isRetryableStorageError(error)) {
-        throw normalizeShelbyUploadError(error, params.accountAddress);
+        throw normalizeShelbyUploadError(error);
       }
 
       await sleep(1000 * (attempt + 1));
     }
   }
 
-  throw normalizeShelbyUploadError(lastError, params.accountAddress);
+  throw normalizeShelbyUploadError(lastError);
 }
 
 export async function uploadBlobsToShelby(
@@ -268,7 +263,7 @@ export async function uploadBlobsToShelby(
       lastError = error;
 
       if (!isRetryableStorageError(error)) {
-        throw normalizeShelbyUploadError(error, address);
+        throw normalizeShelbyUploadError(error);
       }
 
       await sleep(600 * (attempt + 1));
@@ -292,7 +287,7 @@ export async function uploadBlobsToShelby(
         lastError = error;
 
         if (!isRetryableStorageError(error)) {
-          throw normalizeShelbyUploadError(error, address);
+          throw normalizeShelbyUploadError(error);
         }
 
         await sleep(800 * (attempt + 1));
@@ -300,7 +295,7 @@ export async function uploadBlobsToShelby(
     }
 
     if (!uploaded) {
-      throw normalizeShelbyUploadError(lastError, address);
+      throw normalizeShelbyUploadError(lastError);
     }
   }
 }
