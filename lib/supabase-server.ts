@@ -99,6 +99,22 @@ export async function insertAnswerReceiptRecord(record: AnswerReceiptRecord) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("answer_receipts").insert(record).select("*").single();
 
+  if (error && (error.code === "PGRST204" || error.message.includes("blobs_used") || error.message.includes("receipt_blob_id"))) {
+    const fallbackRecord = {
+      id: record.id,
+      wallet_address: record.wallet_address,
+      query: record.query,
+      answer: record.answer,
+      receipt_hash: record.receipt_hash,
+      onchain_tx_hash: record.onchain_tx_hash,
+      blob_ids_used: record.blob_ids_used
+    };
+    const fallback = await supabase.from("answer_receipts").insert(fallbackRecord).select("*").single();
+
+    if (fallback.error) throw fallback.error;
+    return fallback.data as AnswerReceiptRecord & { id: string };
+  }
+
   if (error) throw error;
   return data as AnswerReceiptRecord & { id: string };
 }

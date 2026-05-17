@@ -212,34 +212,17 @@ export async function POST(request: Request) {
     };
     const receiptHash = await computeReceiptIntegrityHash(question, generated.answer, blobIdsUsed);
 
-    let savedReceipt;
-    try {
-      savedReceipt = await insertAnswerReceiptRecord({
-        id: receiptId,
-        wallet_address: walletAddress,
-        query: question,
-        answer: generated.answer,
-        receipt_hash: receiptHash,
-        onchain_tx_hash: "",
-        blob_ids_used: blobIdsUsed,
-        blobs_used: blobsUsed,
-        receipt_blob_id: null
-      });
-    } catch (receiptError) {
-      console.error("Supabase receipt index failed", receiptError);
-      savedReceipt = {
-        id: receiptId,
-        wallet_address: walletAddress,
-        query: question,
-        answer: generated.answer,
-        receipt_hash: receiptHash,
-        onchain_tx_hash: "",
-        blob_ids_used: blobIdsUsed,
-        blobs_used: blobsUsed,
-        receipt_blob_id: null,
-        created_at: new Date().toISOString()
-      };
-    }
+    const savedReceipt = await insertAnswerReceiptRecord({
+      id: receiptId,
+      wallet_address: walletAddress,
+      query: question,
+      answer: generated.answer,
+      receipt_hash: receiptHash,
+      onchain_tx_hash: "",
+      blob_ids_used: blobIdsUsed,
+      blobs_used: blobsUsed,
+      receipt_blob_id: null
+    });
 
     return NextResponse.json({
       ...receipt,
