@@ -51,7 +51,7 @@ export function getSupabaseAdmin() {
 
 export async function insertDocumentRecord(record: DocumentRecord) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("documents").upsert(record, { onConflict: "id" });
+  const { error } = await supabase.from("documents").upsert(record, { onConflict: "wallet_address,file_hash" });
 
   if (error && (error.code === "PGRST204" || error.message.includes("chunk_count") || error.message.includes("size"))) {
     const fallbackRecord = {
@@ -64,7 +64,7 @@ export async function insertDocumentRecord(record: DocumentRecord) {
       file_hash: record.file_hash,
       created_at: record.created_at
     };
-    const fallback = await supabase.from("documents").upsert(fallbackRecord, { onConflict: "id" });
+    const fallback = await supabase.from("documents").upsert(fallbackRecord, { onConflict: "wallet_address,file_hash" });
 
     if (fallback.error) throw fallback.error;
     return;
@@ -83,7 +83,13 @@ export async function listDocumentRecords(walletAddress: string, limit: number) 
     .limit(limit);
 
   if (error) throw error;
-  return (data ?? []) as DocumentRecord[];
+  const seen = new Set<string>();
+  return (data ?? []).filter((doc) => {
+    const key = doc.file_hash ?? doc.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }) as DocumentRecord[];
 }
 
 export async function getDocumentRecord(walletAddress: string, documentId: string) {

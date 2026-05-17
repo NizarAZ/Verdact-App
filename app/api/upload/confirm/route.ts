@@ -43,6 +43,10 @@ export async function POST(request: Request) {
     }
 
     const tx = await waitForTransaction(onchainTxHash);
+    console.log("upload confirm: transaction checked", {
+      success: tx?.success,
+      sender: tx?.sender
+    });
     if (tx?.success === false || String(tx?.sender ?? "").toLowerCase() !== walletAddress) {
       return NextResponse.json({ error: "Onchain transaction is not confirmed for this wallet." }, { status: 400 });
     }
@@ -59,6 +63,7 @@ export async function POST(request: Request) {
     }
 
     await waitForWalletBlobMetadata(walletAddress, blobId);
+    console.log("upload confirm: blob metadata ready", { blobId });
 
     try {
       await putWalletBlob({
@@ -66,6 +71,7 @@ export async function POST(request: Request) {
         blobName: blobId,
         blobData: bytes
       });
+      console.log("upload confirm: blob uploaded", { blobId });
     } catch (blobUploadError) {
       console.error("Wallet blob upload reported failure", blobUploadError);
 
@@ -89,6 +95,7 @@ export async function POST(request: Request) {
     }
 
     await waitForWalletBlobWritten(walletAddress, blobId);
+    console.log("upload confirm: blob written", { blobId });
 
     const compactDocumentId = documentId.replace(/-/g, "");
     const cleanName = sanitizeBlobSegment(file.name);
@@ -158,7 +165,9 @@ export async function POST(request: Request) {
     ]);
 
     await insertDocumentRecord(documentRecord);
+    console.log("upload confirm: DB record inserted", { documentId });
     const savedDocument = await getDocumentRecord(walletAddress, documentId);
+    console.log("upload confirm: DB record readback", savedDocument);
 
     if (!savedDocument) {
       throw new Error("Document was stored but could not be read back from the document index.");
