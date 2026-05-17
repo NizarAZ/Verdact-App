@@ -3,7 +3,7 @@
 > **AI answers you can verify onchain.**
 > Verifiable document intelligence built on Shelby Protocol and Aptos.
 
-Verdact is a RAG pipeline where every answer carries cryptographic proof. Documents are registered onchain via the Shelby smart contract. Every AI answer generates a receipt with a hash, wallet address, and source blob references — publicly verifiable by anyone.
+Verdact is a RAG pipeline where every answer carries cryptographic proof. Documents are registered onchain via the Shelby smart contract. Every AI answer generates a receipt with a hash, wallet address, and source blob references, publicly verifiable by anyone.
 
 **Not just another AI chat. A verifiable knowledge layer.**
 
