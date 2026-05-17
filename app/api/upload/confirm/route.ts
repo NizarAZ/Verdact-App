@@ -3,7 +3,7 @@ import { chunkDocument, isSupportedUpload, readFileText, sanitizeBlobSegment, sh
 import { getEmbedding } from "@/lib/embeddings";
 import { waitForTransaction } from "@/lib/onchain";
 import type { DocumentRecord } from "@/lib/supabase-server";
-import { insertDocumentRecord } from "@/lib/supabase-server";
+import { getDocumentRecord, insertDocumentRecord } from "@/lib/supabase-server";
 import { downloadWalletBlobBytes, putWalletBlob, uploadBlobsToShelby, waitForWalletBlobMetadata, waitForWalletBlobWritten } from "@/lib/shelby-server";
 import { getWalletAddress, getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
 
@@ -158,6 +158,11 @@ export async function POST(request: Request) {
     ]);
 
     await insertDocumentRecord(documentRecord);
+    const savedDocument = await getDocumentRecord(walletAddress, documentId);
+
+    if (!savedDocument) {
+      throw new Error("Document was stored but could not be read back from the document index.");
+    }
 
     return NextResponse.json({
       documentId,

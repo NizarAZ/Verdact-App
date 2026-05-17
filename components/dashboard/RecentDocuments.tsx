@@ -68,26 +68,6 @@ function documentKey(document: DocumentItem) {
   return document.document_id ?? document.metaBlobName ?? document.shelby_blob ?? document.file_name ?? "document";
 }
 
-function duplicateKey(document: DocumentItem) {
-  return `${document.title ?? ""}|${document.file_name ?? ""}`.toLowerCase().trim();
-}
-
-function dedupeDocuments(documents: DocumentItem[]) {
-  const grouped = new Map<string, DocumentItem>();
-
-  for (const document of documents) {
-    const key = duplicateKey(document) || documentKey(document);
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.versionCount = (existing.versionCount ?? 1) + 1;
-    } else {
-      grouped.set(key, { ...document, versionCount: 1 });
-    }
-  }
-
-  return Array.from(grouped.values());
-}
-
 export function RecentDocuments() {
   const { address, walletFetch } = useWallet();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
@@ -158,8 +138,6 @@ export function RecentDocuments() {
     );
   }
 
-  const visibleDocuments = dedupeDocuments(documents);
-
   return (
     <section className="rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
       <div className="flex items-center justify-between border-b border-base p-5">
@@ -175,7 +153,7 @@ export function RecentDocuments() {
       </div>
 
       <div>
-        {visibleDocuments.map((document, index) => (
+        {documents.map((document, index) => (
           <motion.div
             key={documentKey(document)}
             initial={{ opacity: 0, x: -14 }}
