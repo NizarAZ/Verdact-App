@@ -4,11 +4,12 @@ import { getEmbedding } from "@/lib/embeddings";
 import { waitForTransaction } from "@/lib/onchain";
 import type { DocumentRecord } from "@/lib/supabase-server";
 import { insertDocumentRecord } from "@/lib/supabase-server";
-import { downloadWalletBlobBytes, putWalletBlob, uploadBlobsToShelby } from "@/lib/shelby-server";
+import { downloadWalletBlobBytes, putWalletBlob, uploadBlobsToShelby, waitForWalletBlobMetadata, waitForWalletBlobWritten } from "@/lib/shelby-server";
 import { getWalletAddress, getWorkspaceId, workspaceBlobPrefix } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const maxFileBytes = 2 * 1024 * 1024;
 
@@ -57,6 +58,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This document does not contain readable text." }, { status: 400 });
     }
 
+    await waitForWalletBlobMetadata(walletAddress, blobId);
+
     try {
       await putWalletBlob({
         accountAddress: walletAddress,
@@ -85,13 +88,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Shelby stored blob hash does not match the selected file." }, { status: 502 });
     }
 
+    await waitForWalletBlobWritten(walletAddress, blobId);
+
     const compactDocumentId = documentId.replace(/-/g, "");
     const cleanName = sanitizeBlobSegment(file.name);
-    const extension = cleanName.includes(".") ? cleanName.split(".").pop() : "txt";
     const title = typeof titleValue === "string" && titleValue.trim() ? titleValue.trim() : file.name;
     const documentPrefix = workspaceBlobPrefix(workspaceId, "documents");
     const chunkPrefix = workspaceBlobPrefix(workspaceId, "chunks");
-    const originalBlobName = blobId || `${documentPrefix}${compactDocumentId}/original.${extension || "txt"}`;
+    const originalBlobName = blobId || `${documentPrefix}${compactDocumentId}/${cleanName}`;
     const metaBlobName = `${documentPrefix}${compactDocumentId}/meta.json`;
     const textHash = await sha256Hex(text);
     const now = new Date().toISOString();

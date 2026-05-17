@@ -5,6 +5,7 @@ import { Check, Copy, ExternalLink, FileText, RotateCcw, ShieldAlert } from "luc
 import Link from "next/link";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { ShelbyLogo } from "@/components/shelby-logo";
+import { getShelbyAccountBlobsUrl, getShelbyBlobUrl } from "@/lib/shelby-explorer";
 
 type Receipt = {
   id: string;
@@ -42,11 +43,11 @@ function formatTimestamp(value?: string | null) {
 }
 
 function getBlobExplorerUrl(blob: ReceiptBlobReference, walletAddress: string) {
-  if (!blob.tx_hash || !blob.file_name) {
-    return `https://explorer.shelby.xyz/shelbynet/account/${walletAddress}`;
+  if (!blob.path) {
+    return getShelbyAccountBlobsUrl(walletAddress);
   }
 
-  return `https://explorer.shelby.xyz/shelbynet/blobs/${blob.tx_hash}?blobName=${encodeURIComponent(blob.file_name)}`;
+  return getShelbyBlobUrl(walletAddress, blob.path);
 }
 
 function getReceiptBlobs(receipt: Receipt): ReceiptBlobReference[] {

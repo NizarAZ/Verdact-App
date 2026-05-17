@@ -5,6 +5,7 @@ import { getWalletAddress, getWorkspaceId, workspaceBlobPrefix } from "@/lib/wor
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const maxFileBytes = 2 * 1024 * 1024;
 
@@ -39,10 +40,9 @@ export async function POST(request: Request) {
     const documentId = crypto.randomUUID();
     const compactDocumentId = documentId.replace(/-/g, "");
     const cleanName = sanitizeBlobSegment(file.name);
-    const extension = cleanName.includes(".") ? cleanName.split(".").pop() : "txt";
     const title = typeof titleValue === "string" && titleValue.trim() ? titleValue.trim() : file.name;
     const documentPrefix = workspaceBlobPrefix(workspaceId, "documents");
-    const originalBlobName = `${documentPrefix}${compactDocumentId}/original.${extension || "txt"}`;
+    const originalBlobName = `${documentPrefix}${compactDocumentId}/${cleanName}`;
     const fileHash = await sha256Hex(bytes);
     const textHash = await sha256Hex(text);
     const oneYearMicros = 365 * 24 * 60 * 60 * 1_000_000;

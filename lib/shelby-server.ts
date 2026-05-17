@@ -196,6 +196,52 @@ export async function downloadWalletBlobBytes(accountAddress: string, blobName: 
   return new Uint8Array(await response.arrayBuffer());
 }
 
+export async function waitForWalletBlobMetadata(accountAddress: string, blobName: string, timeoutMs = 60_000) {
+  const client = getShelbyClient();
+  const account = AccountAddress.from(accountAddress);
+  const name = normalizeBlobName(blobName);
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const metadata = await client.coordination.getBlobMetadata({ account, name });
+      if (metadata) return metadata;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await sleep(1500);
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Shelby indexer did not expose the registered blob in time.");
+}
+
+export async function waitForWalletBlobWritten(accountAddress: string, blobName: string, timeoutMs = 45_000) {
+  const client = getShelbyClient();
+  const account = AccountAddress.from(accountAddress);
+  const name = normalizeBlobName(blobName);
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const metadata = await client.coordination.getBlobMetadata({ account, name });
+      if (metadata?.isWritten) return metadata;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await sleep(1500);
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Shelby did not mark the stored blob as written in time.");
+}
+
 export async function putWalletBlob(params: {
   accountAddress: string;
   blobName: string;

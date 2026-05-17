@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { BlobTag } from "@/components/shared/BlobTag";
 import { useWallet } from "@/components/WalletProvider";
+import { getShelbyBlobUrl } from "@/lib/shelby-explorer";
 
 type DocumentItem = {
   document_id?: string;
@@ -132,14 +133,14 @@ export function DocumentsArchive() {
                 <BlobTag value={`${document.chunk_count ?? 0} chunks`} />
                 <BlobTag value={shortHash(document.blob_id ?? document.shelby_blob)} />
                 <span className="font-mono text-xs text-text-tertiary">{formatBytes(document.size)}</span>
-                {document.onchain_tx_hash ? (
+                {address && (document.blob_id || document.shelby_blob) ? (
                   <a
-                    href={`https://explorer.aptoslabs.com/txn/${encodeURIComponent(document.onchain_tx_hash)}?network=shelbynet`}
+                    href={getShelbyBlobUrl(address, document.blob_id ?? document.shelby_blob ?? "")}
                     target="_blank"
                     rel="noreferrer"
                     className="font-mono text-xs text-brand"
                   >
-                    View onchain
+                    View Shelby
                   </a>
                 ) : null}
               </div>

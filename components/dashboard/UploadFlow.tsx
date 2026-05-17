@@ -5,6 +5,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import { ArrowRight, Check, FileText, Loader2, UploadCloud, X } from "lucide-react";
 import { BackToDashboard } from "@/components/dashboard/BackToDashboard";
 import { useWallet } from "@/components/WalletProvider";
+import { getShelbyBlobUrl } from "@/lib/shelby-explorer";
 
 type UploadResult = {
   documentId: string;
@@ -58,12 +59,7 @@ export function UploadFlow() {
 
   const derivedTitle = useMemo(() => title || file?.name.replace(/\.[^.]+$/, "") || "", [file, title]);
   const canSubmit = Boolean(address && file && !["uploading", "signing", "confirming"].includes(status));
-  const blobUrl = address && result?.blobId
-    ? `${process.env.NEXT_PUBLIC_SHELBY_RPC_URL || "https://api.shelbynet.shelby.xyz/shelby"}/v1/blobs/${encodeURIComponent(address)}/${result.blobId
-        .split("/")
-        .map((segment) => encodeURIComponent(segment))
-        .join("/")}`
-    : null;
+  const blobUrl = address && result?.blobId ? getShelbyBlobUrl(address, result.blobId) : null;
   const txUrl = txHash ? `https://explorer.aptoslabs.com/txn/${encodeURIComponent(txHash)}?network=shelbynet` : null;
 
   useEffect(() => {
@@ -307,6 +303,11 @@ export function UploadFlow() {
                 >
                   tx {result.onchainTxHash.slice(0, 10)}...{result.onchainTxHash.slice(-6)} ↗
                 </a>
+                {blobUrl ? (
+                  <a href={blobUrl} target="_blank" rel="noopener noreferrer" className="inline-flex text-brand">
+                    View Shelby blob ↗
+                  </a>
+                ) : null}
               </div>
               {result.metadataWarning ? <p className="mt-3 font-body text-xs text-text-tertiary">{result.metadataWarning}</p> : null}
               <div className="mt-5 flex flex-col gap-3">
