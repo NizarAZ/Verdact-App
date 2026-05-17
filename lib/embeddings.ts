@@ -2,8 +2,12 @@ import "server-only";
 
 let embedderPromise: Promise<any> | null = null;
 
-function getEmbedder() {
+async function getEmbedder() {
   if (!embedderPromise) {
+    const { env } = await import("@xenova/transformers");
+    env.cacheDir = "/tmp/.transformers-cache";
+    env.localModelPath = "/tmp/.transformers-cache";
+
     console.time("embedder-init");
     embedderPromise = import("@xenova/transformers")
       .then(({ pipeline }) =>
