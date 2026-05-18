@@ -76,7 +76,7 @@ function receiptHref(receipt: Receipt) {
 }
 
 export function RecentActivity() {
-  const { walletFetch } = useWallet();
+  const { address, walletFetch } = useWallet();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -84,6 +84,11 @@ export function RecentActivity() {
     let mounted = true;
 
     async function loadReceipts() {
+      if (!address) {
+        if (mounted) setLoaded(true);
+        return;
+      }
+
       try {
         const response = await walletFetch("/api/receipts?limit=3", { cache: "no-store" });
         const payload = (await response.json()) as Receipt[];
@@ -100,7 +105,7 @@ export function RecentActivity() {
     return () => {
       mounted = false;
     };
-  }, [walletFetch]);
+  }, [address, walletFetch]);
 
   if (receipts.length === 0) {
     if (!loaded) return null;

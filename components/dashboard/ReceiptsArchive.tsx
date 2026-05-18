@@ -24,7 +24,7 @@ function receiptId(receipt: Receipt) {
 }
 
 export function ReceiptsArchive() {
-  const { walletFetch } = useWallet();
+  const { address, walletFetch } = useWallet();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +32,11 @@ export function ReceiptsArchive() {
     let mounted = true;
 
     async function loadReceipts() {
+      if (!address) {
+        if (mounted) setLoading(false);
+        return;
+      }
+
       try {
         const response = await walletFetch("/api/receipts?limit=25", { cache: "no-store" });
         const payload = await response.json();
@@ -48,7 +53,7 @@ export function ReceiptsArchive() {
     return () => {
       mounted = false;
     };
-  }, [walletFetch]);
+  }, [address, walletFetch]);
 
   return (
     <div>

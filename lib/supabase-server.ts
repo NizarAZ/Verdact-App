@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { readServerEnv } from "@/lib/server-env";
+import { normalizeWalletAddress } from "@/lib/workspace";
 
 export type DocumentRecord = {
   id: string;
@@ -144,15 +145,69 @@ export async function insertAnswerReceiptRecord(record: AnswerReceiptRecord) {
 
 export async function listAnswerReceiptRecords(walletAddress: string, limit: number) {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+
+  async function selectReceipts(matchWallet: boolean, queryLimit: number) {
+    const query = supabase
+      .from("answer_receipts")
+      .select("*");
+
+    const filteredQuery = matchWallet ? query.eq("wallet_address", walletAddress) : query;
+    const ordered = await filteredQuery.order("created_at", { ascending: false }).limit(queryLimit);
+
+    if (!ordered.error) {
+      return (ordered.data ?? []) as AnswerReceiptRecord[];
+    }
+
+    const message = ordered.error.message ?? "";
+    if (!message.includes("created_at") && !message.includes("Could not find") && ordered.error.code !== "PGRST204") {
+      throw ordered.error;
+    }
+
+    const unorderedQuery = supabase
+      .from("answer_receipts")
+      .select("*");
+
+    const unorderedFilteredQuery = matchWallet ? unorderedQuery.eq("wallet_address", walletAddress) : unorderedQuery;
+    const unordered = await unorderedFilteredQuery.limit(queryLimit);
+
+    if (unordered.error) throw unordered.error;
+    return (unordered.data ?? []) as AnswerReceiptRecord[];
+  }
+
+  const exactReceipts = await selectReceipts(true, limit);
+  if (exactReceipts.length > 0) {
+    return exactReceipts;
+  }
+
+  return (await selectReceipts(false, Math.max(limit * 5, 50)))
+    .filter((receipt) => normalizeWalletAddress(receipt.wallet_address) === walletAddress)
+    .slice(0, limit);
+}
+
+export async function listAllAnswerReceiptRecords(limit: number) {
+  const supabase = getSupabaseAdmin();
+  const ordered = await supabase
     .from("answer_receipts")
     .select("*")
-    .eq("wallet_address", walletAddress)
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  if (error) throw error;
-  return (data ?? []) as AnswerReceiptRecord[];
+  if (!ordered.error) {
+    return (ordered.data ?? []) as AnswerReceiptRecord[];
+  }
+
+  const message = ordered.error.message ?? "";
+  if (!message.includes("created_at") && !message.includes("Could not find") && ordered.error.code !== "PGRST204") {
+    throw ordered.error;
+  }
+
+  const unordered = await supabase
+    .from("answer_receipts")
+    .select("*")
+    .limit(limit);
+
+  if (unordered.error) throw unordered.error;
+  return (unordered.data ?? []) as AnswerReceiptRecord[];
 }
 
 export async function getDocumentByTxHash(txHash: string) {
