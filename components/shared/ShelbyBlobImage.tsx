@@ -19,17 +19,25 @@ export function ShelbyBlobImage({ walletAddress, blobId, alt, className, fallbac
   useEffect(() => {
     let objectUrl: string | null = null;
     let active = true;
+    const retryDelays = [0, 600, 1400, 2600, 4200, 6500];
     setUrl(null);
     setFailed(false);
 
     async function load() {
       if (!walletAddress || !blobId) return;
-      try {
-        const bytes = await readShelbyBlob({ walletAddress, blobName: blobId });
-        objectUrl = createBlobObjectUrl(bytes, "image/*");
-        if (active) setUrl(objectUrl);
-      } catch {
-        if (active) setFailed(true);
+      for (let index = 0; index < retryDelays.length; index += 1) {
+        if (!active) return;
+        if (retryDelays[index] > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, retryDelays[index]));
+        }
+        try {
+          const bytes = await readShelbyBlob({ walletAddress, blobName: blobId });
+          objectUrl = createBlobObjectUrl(bytes, "image/*");
+          if (active) setUrl(objectUrl);
+          return;
+        } catch {
+          if (index === retryDelays.length - 1 && active) setFailed(true);
+        }
       }
     }
 

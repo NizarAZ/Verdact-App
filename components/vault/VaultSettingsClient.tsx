@@ -28,6 +28,10 @@ export function VaultSettingsClient() {
   const [form, setForm] = useState<any | null>(null);
   const [status, setStatus] = useState("");
   const [assetPreview, setAssetPreview] = useState<{ avatar_blob_id?: string; cover_blob_id?: string }>({});
+  const [assetUploads, setAssetUploads] = useState<{ avatar_blob_id: boolean; cover_blob_id: boolean }>({
+    avatar_blob_id: false,
+    cover_blob_id: false
+  });
 
   useEffect(() => {
     if (!isConnected) return;
@@ -39,6 +43,10 @@ export function VaultSettingsClient() {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    if (assetUploads.avatar_blob_id || assetUploads.cover_blob_id) {
+      setStatus("Wait for image uploads to finish before saving.");
+      return;
+    }
     setStatus("");
     const response = await walletFetch("/api/vault/me", {
       method: "PATCH",
@@ -49,13 +57,15 @@ export function VaultSettingsClient() {
     if (!response.ok) setStatus(json.error || "Failed to save settings.");
     else {
       setForm(json.vault);
+      setAssetPreview({});
       setStatus("Settings saved.");
     }
   }
 
   async function uploadAsset(field: "avatar_blob_id" | "cover_blob_id", file?: File | null) {
     if (!file || !address) return;
-    setStatus("Uploading image to Shelby.");
+    setStatus(field === "avatar_blob_id" ? "Uploading avatar to Shelby." : "Uploading cover to Shelby.");
+    setAssetUploads((current) => ({ ...current, [field]: true }));
     const previewUrl = URL.createObjectURL(file);
     setAssetPreview((current) => ({ ...current, [field]: previewUrl }));
     try {
@@ -76,11 +86,13 @@ export function VaultSettingsClient() {
         await putShelbyBlobViaServer({ blobName, file, walletFetch });
       }
       setForm((current: any) => ({ ...current, [field]: blobName }));
-      setStatus("Image uploaded. Save settings to publish it.");
+      setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} uploaded. Save settings to publish it.`);
     } catch (error) {
       URL.revokeObjectURL(previewUrl);
       setAssetPreview((current) => ({ ...current, [field]: undefined }));
       setStatus(error instanceof Error ? error.message : "Image upload failed.");
+    } finally {
+      setAssetUploads((current) => ({ ...current, [field]: false }));
     }
   }
 
@@ -174,8 +186,10 @@ export function VaultSettingsClient() {
                     )}
                   </div>
                   <p className="mt-5 font-display text-3xl leading-none">Avatar</p>
-                  <p className="mt-2 text-xs leading-5 text-text-tertiary">Stored as a Shelby blob and used on marketplace cards.</p>
-                  <input type="file" accept="image/*" onChange={(event) => uploadAsset("avatar_blob_id", event.target.files?.[0])} className="sr-only" />
+                  <p className="mt-2 text-xs leading-5 text-text-tertiary">
+                    {assetUploads.avatar_blob_id ? "Uploading and confirming on Shelby." : "Stored as a Shelby blob and used on marketplace cards."}
+                  </p>
+                  <input type="file" accept="image/*" disabled={assetUploads.avatar_blob_id} onChange={(event) => uploadAsset("avatar_blob_id", event.target.files?.[0])} className="sr-only" />
                 </label>
                 <label className="interactive-control vault-fieldset block cursor-pointer p-5">
                   <div className="flex h-28 items-center justify-center overflow-hidden border border-base bg-[color:var(--vault-bg)]">
@@ -186,8 +200,10 @@ export function VaultSettingsClient() {
                     )}
                   </div>
                   <p className="mt-5 font-display text-3xl leading-none">Cover</p>
-                  <p className="mt-2 text-xs leading-5 text-text-tertiary">Creates a more finished public storefront header.</p>
-                  <input type="file" accept="image/*" onChange={(event) => uploadAsset("cover_blob_id", event.target.files?.[0])} className="sr-only" />
+                  <p className="mt-2 text-xs leading-5 text-text-tertiary">
+                    {assetUploads.cover_blob_id ? "Uploading and confirming on Shelby." : "Creates a more finished public storefront header."}
+                  </p>
+                  <input type="file" accept="image/*" disabled={assetUploads.cover_blob_id} onChange={(event) => uploadAsset("cover_blob_id", event.target.files?.[0])} className="sr-only" />
                 </label>
               </div>
               <div className="mt-4 grid gap-4">
@@ -217,9 +233,9 @@ export function VaultSettingsClient() {
               </div>
             </div>
 
-            <button type="submit" className="interactive-control min-h-12 bg-brand px-5 font-mono text-sm text-brand-dark">
+            <button type="submit" disabled={assetUploads.avatar_blob_id || assetUploads.cover_blob_id} className="interactive-control min-h-12 bg-brand px-5 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
               <Check className="mr-2 inline h-4 w-4" />
-              Save storefront settings
+              {assetUploads.avatar_blob_id || assetUploads.cover_blob_id ? "Waiting for image upload" : "Save storefront settings"}
             </button>
           </section>
         </form>
