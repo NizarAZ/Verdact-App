@@ -11,7 +11,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { createBlobObjectUrl, createShelbyUsdTransferPayload, readShelbyBlob } from "@/lib/shelby-browser";
 import { amountToMicroUnits } from "@/lib/amount";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
-import type { ContentRecord, VaultRecord } from "@/lib/supabase-server";
+import type { ContentRecord, SubscriptionRecord, VaultRecord } from "@/lib/supabase-server";
 
 type CreatorState = {
   vault: VaultRecord;
@@ -20,6 +20,7 @@ type CreatorState = {
   isOwner: boolean;
   isFavourite: boolean;
   supporterCount: number;
+  subscription?: SubscriptionRecord | null;
 };
 
 const donationPresets = [0.1, 0.5, 1, 5];
@@ -305,9 +306,24 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
               </div>
             </div>
             {state.vault.is_paid ? (
-              <Link href={`/subscribe/${state.vault.wallet_address}`} className="interactive-control inline-flex min-h-11 items-center justify-center rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark">
-                Subscribe
-              </Link>
+              state.hasAccess && !state.isOwner ? (
+                <div className="grid gap-2 text-left md:text-right">
+                  <button type="button" disabled className="inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-sm border border-base px-4 font-mono text-sm text-text-primary opacity-80">
+                    Subscribed
+                  </button>
+                  {state.subscription?.expires_at ? (
+                    <p className="font-mono text-xs text-text-tertiary">Ends {formatDate(state.subscription.expires_at)}</p>
+                  ) : null}
+                </div>
+              ) : state.isOwner ? (
+                <Link href="/vault" className="interactive-control inline-flex min-h-11 items-center justify-center rounded-sm border border-base px-4 font-mono text-sm text-text-primary">
+                  Manage vault
+                </Link>
+              ) : (
+                <Link href={`/subscribe/${state.vault.wallet_address}`} className="interactive-control inline-flex min-h-11 items-center justify-center rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark">
+                  Subscribe
+                </Link>
+              )
             ) : (
               <button type="button" onClick={() => setDonating(true)} className="interactive-control inline-flex min-h-11 items-center justify-center rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark">
                 Donate

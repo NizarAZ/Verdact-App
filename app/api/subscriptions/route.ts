@@ -1,10 +1,29 @@
 import { NextResponse } from "next/server";
 import { amountToMicroUnits, verifyShelbyUsdTransfer } from "@/lib/onchain";
-import { getSupabaseAdmin, getVaultByWallet } from "@/lib/supabase-server";
+import { getActiveSubscription, getSupabaseAdmin, getVaultByWallet } from "@/lib/supabase-server";
 import { getWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  try {
+    const subscriberWallet = getWalletAddress(request);
+    const { searchParams } = new URL(request.url);
+    const creatorWallet = normalizeWalletAddress(searchParams.get("creator_wallet"));
+    if (!creatorWallet) {
+      return NextResponse.json({ error: "Missing creator wallet." }, { status: 400 });
+    }
+
+    const subscription = await getActiveSubscription(subscriberWallet, creatorWallet);
+    return NextResponse.json({ subscription });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load subscription." },
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
+    );
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +38,17 @@ export async function POST(request: Request) {
     const vault = await getVaultByWallet(creatorWallet);
     if (!vault || !vault.is_paid || Number(vault.price_monthly) <= 0) {
       return NextResponse.json({ error: "Creator does not offer a paid subscription." }, { status: 400 });
+    }
+
+    const activeSubscription = await getActiveSubscription(subscriberWallet, creatorWallet);
+    if (activeSubscription) {
+      return NextResponse.json(
+        {
+          error: "Subscription is already active.",
+          subscription: activeSubscription
+        },
+        { status: 409 }
+      );
     }
 
     const amountMicroUnits = amountToMicroUnits(vault.price_monthly);

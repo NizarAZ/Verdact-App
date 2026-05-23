@@ -1,23 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { BackLink } from "@/components/ui/BackLink";
 import { amountToMicroUnits } from "@/lib/amount";
 import { formatAmount, truncateMiddle } from "@/lib/format";
 import { createShelbyUsdTransferPayload } from "@/lib/shelby-browser";
-import type { ContentRecord, VaultRecord } from "@/lib/supabase-server";
+import type { ContentRecord, SubscriptionRecord, VaultRecord } from "@/lib/supabase-server";
+
+function formatExpiry(value?: string | null) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
 
 export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; previews: ContentRecord[] }) {
-  const router = useRouter();
   const { isConnected, signAndSubmitTransaction, walletFetch } = useWallet();
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionRecord | null>(null);
+
+  useEffect(() => {
+    if (!isConnected) {
+      setActiveSubscription(null);
+      return;
+    }
+
+    let active = true;
+    walletFetch(`/api/subscriptions?creator_wallet=${encodeURIComponent(vault.wallet_address)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((json) => {
+        if (active) setActiveSubscription(json.subscription ?? null);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [isConnected, vault.wallet_address, walletFetch]);
 
   async function subscribe() {
+    if (activeSubscription) return;
     setBusy(true);
     setStatus("");
     try {
@@ -35,8 +60,16 @@ export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; p
         })
       });
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error || "Subscription failed.");
-      router.push(`/creator/${vault.wallet_address}`);
+      if (!response.ok) {
+        if (response.status === 409 && json.subscription) {
+          setActiveSubscription(json.subscription);
+          setStatus(`Already subscribed until ${formatExpiry(json.subscription.expires_at)}.`);
+          return;
+        }
+        throw new Error(json.error || "Subscription failed.");
+      }
+      setActiveSubscription(json.subscription);
+      setStatus(`Subscription active until ${formatExpiry(json.subscription?.expires_at)}.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Subscription failed.");
     } finally {
@@ -65,13 +98,30 @@ export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; p
             </div>
             <div className="mt-8">
               {isConnected ? (
-                <button type="button" onClick={subscribe} disabled={busy} className="interactive-control min-h-12 w-full rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark disabled:opacity-50">
-                  {busy ? "Confirming payment" : `Subscribe for ${formatAmount(vault.price_monthly)} ShelbyUSD/month`}
-                </button>
+                <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-stretch">
+                  <button
+                    type="button"
+                    onClick={subscribe}
+                    disabled={busy || Boolean(activeSubscription)}
+                    className="interactive-control min-h-12 rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {activeSubscription ? "Subscribed" : busy ? "Confirming payment" : `Subscribe for ${formatAmount(vault.price_monthly)} ShelbyUSD/month`}
+                  </button>
+                  {activeSubscription ? (
+                    <div className="flex min-h-12 items-center justify-center rounded-sm border border-base px-4 text-center font-mono text-xs text-text-secondary">
+                      Ends {formatExpiry(activeSubscription.expires_at)}
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <WalletButton />
               )}
               {status ? <p className="mt-4 text-sm text-text-secondary">{status}</p> : null}
+              {activeSubscription ? (
+                <Link href={`/creator/${vault.wallet_address}`} className="interactive-control mt-4 inline-flex min-h-10 items-center justify-center rounded-sm border border-base px-4 font-mono text-xs text-text-primary">
+                  Open subscribed vault
+                </Link>
+              ) : null}
             </div>
           </section>
 

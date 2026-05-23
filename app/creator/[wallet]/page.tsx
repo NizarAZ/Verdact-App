@@ -25,7 +25,8 @@ export default async function CreatorPage({ params }: { params: { wallet: string
         hasAccess: !vault.is_paid,
         isOwner: false,
         isFavourite: false,
-        supporterCount
+        supporterCount,
+        subscription: null
       }}
     />
   );
