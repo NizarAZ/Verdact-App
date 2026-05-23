@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
+import { BackLink } from "@/components/ui/BackLink";
 
 export function AppAuthGate({ children }: { children: React.ReactNode }) {
   const { isConnected, isReady } = useWallet();
@@ -14,11 +15,12 @@ export function AppAuthGate({ children }: { children: React.ReactNode }) {
   if (!isConnected) {
     return (
       <section className="mx-auto max-w-[1100px]">
+        <BackLink href="/" label="Back to marketplace" className="mb-6" />
         <div className="max-w-md rounded-[var(--radius-md)] border border-base bg-[color:var(--color-surface)]">
           <div className="flex min-h-[220px] flex-col items-center justify-center p-5 text-center">
             <p className="font-display text-[28px] leading-none text-text-primary">Connect wallet</p>
             <p className="mt-2 max-w-sm font-body text-sm text-text-tertiary">
-              Connect Petra to unlock uploads, queries, receipts, and onchain proof.
+              Connect Petra to manage creator uploads, subscriptions, donations, and favourites.
             </p>
             <div className="mt-5">
               <WalletButton />

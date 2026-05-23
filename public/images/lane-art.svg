@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="Art lane cover">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#d8d2ef"/>
+      <stop offset="0.38" stop-color="#f0d9c7"/>
+      <stop offset="0.72" stop-color="#b9c7e6"/>
+      <stop offset="1" stop-color="#6b6290"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence baseFrequency="0.8" numOctaves="3" seed="8" type="fractalNoise"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.08"/>
+      </feComponentTransfer>
+      <feBlend mode="multiply" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="420" fill="url(#sky)"/>
+  <g opacity="0.54" filter="url(#grain)">
+    <path d="M0 100 C140 50 260 78 386 42 C514 6 633 44 732 80 C857 126 978 66 1200 38 L1200 0 L0 0 Z" fill="#f5ecdd"/>
+    <path d="M0 228 C172 176 310 214 470 174 C634 132 802 150 950 206 C1078 254 1132 218 1200 194 L1200 420 L0 420 Z" fill="#c5b8dc"/>
+    <path d="M62 286 C192 216 330 248 496 230 C688 210 822 244 970 318 C1052 360 1122 358 1200 328 L1200 420 L0 420 Z" fill="#ead5c6" opacity="0.58"/>
+  </g>
+  <g transform="translate(820 98)">
+    <path d="M130 44 C148 54 164 82 158 116 C151 154 118 174 80 169 C45 164 20 136 18 100 C16 58 48 29 92 30 C106 31 119 36 130 44 Z" fill="#19140f" opacity="0.88"/>
+    <path d="M87 170 C102 205 126 238 170 280 L132 280 C98 244 77 210 66 176 Z" fill="#19140f" opacity="0.92"/>
+    <path d="M34 96 C-20 122 -74 146 -118 166" stroke="#19140f" stroke-width="20" stroke-linecap="round" opacity="0.82"/>
+    <path d="M114 128 C152 150 189 170 236 187" stroke="#19140f" stroke-width="18" stroke-linecap="round" opacity="0.7"/>
+  </g>
+  <rect x="0" y="0" width="1200" height="420" fill="none" stroke="#8f7c59" stroke-opacity="0.22"/>
+</svg>

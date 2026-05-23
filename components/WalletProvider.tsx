@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo } from "react";
 import type { InputGenerateTransactionPayloadData } from "@aptos-labs/ts-sdk";
 import { AptosWalletAdapterProvider, useWallet as useAptosWallet } from "@aptos-labs/wallet-adapter-react";
-import { normalizeWalletAddress } from "@/lib/workspace";
+import { normalizeWalletAddress } from "@/lib/wallet";
 
 type WalletAccount = ReturnType<typeof useAptosWallet>["account"];
 

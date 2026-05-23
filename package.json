@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "postinstall": "node scripts/patch-shelby-clay-wasm.cjs",
-    "build": "node scripts/patch-shelby-clay-wasm.cjs && next build",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
@@ -26,7 +26,6 @@
     "@studio-freight/lenis": "^1.0.42",
     "@supabase/supabase-js": "^2.105.4",
     "@telegram-apps/bridge": "^2.11.0",
-    "@xenova/transformers": "^2.17.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
@@ -36,10 +35,11 @@
     "motion": "^12.38.0",
     "nanobanana-cli": "^0.2.1",
     "next": "^14.2.35",
-    "pdf-parse": "^1.1.1",
     "petra-plugin-wallet-adapter": "^0.4.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-is": "^19.2.6",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {

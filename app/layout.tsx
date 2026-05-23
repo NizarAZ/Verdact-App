@@ -4,8 +4,8 @@ import { WalletProvider } from "@/components/WalletProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Verdact | Onchain AI Receipts",
-  description: "Verdact registers Shelby documents onchain, answers from confirmed blobs, and shares public receipt verification.",
+  title: "Verdact | Decentralized Creator Platform",
+  description: "Verdact stores creator content on Shelby Protocol and sends ShelbyUSD payments directly wallet-to-wallet.",
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",

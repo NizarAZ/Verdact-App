@@ -1,51 +1,80 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS documents (
+DROP TABLE IF EXISTS answer_receipts CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+
+CREATE TABLE IF NOT EXISTS vaults (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  wallet_address TEXT NOT NULL,
-  file_name TEXT NOT NULL,
-  title TEXT,
-  onchain_tx_hash TEXT NOT NULL,
-  blob_id TEXT NOT NULL,
-  file_hash TEXT NOT NULL,
-  chunk_count INTEGER DEFAULT 0,
-  size INTEGER,
+  wallet_address TEXT UNIQUE NOT NULL,
+  display_name TEXT,
+  bio TEXT,
+  category TEXT,
+  avatar_blob_id TEXT,
+  cover_blob_id TEXT,
+  is_paid BOOLEAN DEFAULT false,
+  price_monthly NUMERIC DEFAULT 0,
+  subscriber_count INTEGER DEFAULT 0,
+  total_earnings NUMERIC DEFAULT 0,
+  show_donation_total BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT now()
 );
 
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS onchain_tx_hash TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS blob_id TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_hash TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS wallet_address TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_name TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS title TEXT;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS chunk_count INTEGER DEFAULT 0;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS size INTEGER;
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
-
-CREATE TABLE IF NOT EXISTS answer_receipts (
+CREATE TABLE IF NOT EXISTS content (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vault_id UUID REFERENCES vaults(id),
   wallet_address TEXT NOT NULL,
-  query TEXT NOT NULL,
-  answer TEXT NOT NULL,
-  receipt_hash TEXT NOT NULL,
-  onchain_tx_hash TEXT NOT NULL,
-  blob_ids_used TEXT[] NOT NULL,
-  blobs_used JSONB,
-  receipt_blob_id TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  file_type TEXT,
+  file_name TEXT,
+  blob_id TEXT,
+  onchain_tx_hash TEXT,
+  size_bytes INTEGER,
+  duration_seconds INTEGER,
+  thumbnail_blob_id TEXT,
+  allow_download BOOLEAN DEFAULT true,
+  is_preview BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT now()
 );
 
-ALTER TABLE answer_receipts ADD COLUMN IF NOT EXISTS blobs_used JSONB;
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscriber_wallet TEXT NOT NULL,
+  creator_wallet TEXT NOT NULL,
+  tx_hash TEXT NOT NULL,
+  amount_paid NUMERIC,
+  starts_at TIMESTAMP DEFAULT now(),
+  expires_at TIMESTAMP NOT NULL
+);
 
-CREATE INDEX IF NOT EXISTS documents_wallet_address_idx ON documents(wallet_address);
-CREATE INDEX IF NOT EXISTS documents_onchain_tx_hash_idx ON documents(onchain_tx_hash);
-CREATE INDEX IF NOT EXISTS answer_receipts_wallet_address_idx ON answer_receipts(wallet_address);
-CREATE INDEX IF NOT EXISTS answer_receipts_onchain_tx_hash_idx ON answer_receipts(onchain_tx_hash);
+CREATE TABLE IF NOT EXISTS donations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  donor_wallet TEXT NOT NULL,
+  creator_wallet TEXT NOT NULL,
+  amount NUMERIC NOT NULL,
+  message TEXT,
+  tx_hash TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT now()
+);
 
-ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE answer_receipts DISABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS favourites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscriber_wallet TEXT NOT NULL,
+  creator_wallet TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT now(),
+  UNIQUE(subscriber_wallet, creator_wallet)
+);
 
--- Optional if you re-enable RLS later and want direct public SELECT access.
-DROP POLICY IF EXISTS "Public read" ON answer_receipts;
-CREATE POLICY "Public read" ON answer_receipts FOR SELECT USING (true);
+CREATE TABLE IF NOT EXISTS content_views (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_id UUID REFERENCES content(id),
+  viewer_wallet TEXT,
+  viewed_at TIMESTAMP DEFAULT now()
+);
+
+ALTER TABLE vaults DISABLE ROW LEVEL SECURITY;
+ALTER TABLE content DISABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE donations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE favourites DISABLE ROW LEVEL SECURITY;
+ALTER TABLE content_views DISABLE ROW LEVEL SECURITY;

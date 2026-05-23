@@ -1,38 +1,68 @@
 import { createClient } from "@supabase/supabase-js";
+import { categories } from "@/lib/constants";
 import { readServerEnv } from "@/lib/server-env";
-import { normalizeWalletAddress } from "@/lib/workspace";
+import { normalizeWalletAddress } from "@/lib/wallet";
 
-export type DocumentRecord = {
+export type VaultRecord = {
   id: string;
   wallet_address: string;
-  file_name: string;
-  title?: string | null;
-  onchain_tx_hash: string;
-  blob_id: string;
-  file_hash: string;
-  chunk_count?: number | null;
-  size?: number | null;
-  created_at?: string | null;
+  display_name: string | null;
+  bio: string | null;
+  category: string | null;
+  avatar_blob_id: string | null;
+  cover_blob_id: string | null;
+  is_paid: boolean;
+  price_monthly: number;
+  subscriber_count: number;
+  total_earnings: number;
+  show_donation_total: boolean;
+  created_at: string | null;
 };
 
-export type ReceiptBlobReference = {
-  path: string;
-  tx_hash?: string | null;
-  file_name?: string | null;
-};
-
-export type AnswerReceiptRecord = {
-  id?: string;
+export type ContentRecord = {
+  id: string;
+  vault_id: string;
   wallet_address: string;
-  query: string;
-  answer: string;
-  receipt_hash: string;
-  onchain_tx_hash: string;
-  blob_ids_used: string[];
-  blobs_used?: ReceiptBlobReference[] | null;
-  receipt_blob_id?: string | null;
-  created_at?: string | null;
+  title: string;
+  description: string | null;
+  file_type: string | null;
+  file_name: string | null;
+  blob_id: string | null;
+  onchain_tx_hash: string | null;
+  size_bytes: number | null;
+  duration_seconds: number | null;
+  thumbnail_blob_id: string | null;
+  allow_download: boolean;
+  is_preview: boolean;
+  created_at: string | null;
 };
+
+export type DonationRecord = {
+  id: string;
+  donor_wallet: string;
+  creator_wallet: string;
+  amount: number;
+  message: string | null;
+  tx_hash: string;
+  created_at: string | null;
+};
+
+export type SubscriptionRecord = {
+  id: string;
+  subscriber_wallet: string;
+  creator_wallet: string;
+  tx_hash: string;
+  amount_paid: number;
+  starts_at: string | null;
+  expires_at: string;
+};
+
+export type CreatorCard = VaultRecord & {
+  content_count: number;
+  latest_preview_content: Pick<ContentRecord, "id" | "title" | "file_type" | "is_preview" | "created_at">[];
+};
+
+export { categories };
 
 export function getSupabaseAdmin() {
   const url = readServerEnv("SUPABASE_URL");
@@ -50,186 +80,157 @@ export function getSupabaseAdmin() {
   });
 }
 
-export async function insertDocumentRecord(record: DocumentRecord) {
+export async function listCreators(params: {
+  access?: "all" | "free" | "paid";
+  category?: string;
+  sort?: "newest" | "subscribers" | "content";
+  q?: string;
+} = {}) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from("documents").upsert(record, { onConflict: "wallet_address,file_hash" });
+  let query = supabase.from("vaults").select("*");
 
-  if (error && (error.code === "PGRST204" || error.message.includes("chunk_count") || error.message.includes("size"))) {
-    const fallbackRecord = {
-      id: record.id,
-      wallet_address: record.wallet_address,
-      file_name: record.file_name,
-      title: record.title,
-      onchain_tx_hash: record.onchain_tx_hash,
-      blob_id: record.blob_id,
-      file_hash: record.file_hash,
-      created_at: record.created_at
-    };
-    const fallback = await supabase.from("documents").upsert(fallbackRecord, { onConflict: "wallet_address,file_hash" });
+  if (params.access === "free") query = query.eq("is_paid", false);
+  if (params.access === "paid") query = query.eq("is_paid", true);
+  if (params.category) query = query.eq("category", params.category);
 
-    if (fallback.error) throw fallback.error;
-    return;
+  if (params.sort === "subscribers") {
+    query = query.order("subscriber_count", { ascending: false });
+  } else {
+    query = query.order("created_at", { ascending: false });
   }
 
-  if (error) throw error;
+  const { data, error } = await query.limit(100);
+  if (error) {
+    if (error.code === "PGRST205" || error.message.includes("vaults")) return [];
+    throw error;
+  }
+
+  let vaults = (data ?? []) as VaultRecord[];
+  const search = params.q?.trim().toLowerCase();
+  if (search) {
+    vaults = vaults.filter((vault) =>
+      [vault.display_name, vault.bio, vault.category, vault.wallet_address]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(search))
+    );
+  }
+
+  const ids = vaults.map((vault) => vault.id);
+  const counts = new Map<string, number>();
+  const latestPreview = new Map<string, CreatorCard["latest_preview_content"]>();
+
+  if (ids.length > 0) {
+    const { data: content, error: contentError } = await supabase
+      .from("content")
+      .select("id,vault_id,title,file_type,is_preview,created_at")
+      .in("vault_id", ids)
+      .order("created_at", { ascending: false });
+    if (contentError) throw contentError;
+    for (const item of content ?? []) {
+      counts.set(item.vault_id, (counts.get(item.vault_id) ?? 0) + 1);
+      if (item.is_preview) {
+        const previews = latestPreview.get(item.vault_id) ?? [];
+        if (previews.length < 3) {
+          previews.push({
+            id: item.id,
+            title: item.title,
+            file_type: item.file_type,
+            is_preview: item.is_preview,
+            created_at: item.created_at
+          });
+          latestPreview.set(item.vault_id, previews);
+        }
+      }
+    }
+  }
+
+  const creators = vaults.map((vault) => ({
+    ...vault,
+    content_count: counts.get(vault.id) ?? 0,
+    latest_preview_content: latestPreview.get(vault.id) ?? []
+  }));
+
+  if (params.sort === "content") {
+    creators.sort((a, b) => b.content_count - a.content_count);
+  }
+
+  return creators satisfies CreatorCard[];
 }
 
-export async function listDocumentRecords(walletAddress: string, limit: number) {
+export async function getVaultByWallet(walletAddress: string) {
+  const normalized = normalizeWalletAddress(walletAddress);
+  if (!normalized) return null;
+
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("documents")
+    .from("vaults")
     .select("*")
-    .eq("wallet_address", walletAddress)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error) throw error;
-  const seen = new Set<string>();
-  return (data ?? []).filter((doc) => {
-    const key = doc.file_hash ?? doc.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }) as DocumentRecord[];
-}
-
-export async function getDocumentRecord(walletAddress: string, documentId: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("wallet_address", walletAddress)
-    .eq("id", documentId)
+    .eq("wallet_address", normalized)
     .maybeSingle();
 
   if (error) throw error;
-  return data as DocumentRecord | null;
+  return data as VaultRecord | null;
 }
 
-export async function getDocumentRecordByBlobId(walletAddress: string, blobId: string) {
+export async function getContentForVault(vaultId: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("documents")
-    .select("onchain_tx_hash,file_name,blob_id,wallet_address,id,file_hash,title,chunk_count,size,created_at")
-    .eq("wallet_address", walletAddress)
-    .eq("blob_id", blobId)
+    .from("content")
+    .select("*")
+    .eq("vault_id", vaultId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as ContentRecord[];
+}
+
+export async function getActiveSubscription(subscriberWallet: string, creatorWallet: string) {
+  const subscriber = normalizeWalletAddress(subscriberWallet);
+  const creator = normalizeWalletAddress(creatorWallet);
+  if (!subscriber || !creator) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("subscriber_wallet", subscriber)
+    .eq("creator_wallet", creator)
+    .gt("expires_at", new Date().toISOString())
+    .order("expires_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw error;
-  return data as DocumentRecord | null;
+  return data as SubscriptionRecord | null;
 }
 
-export async function insertAnswerReceiptRecord(record: AnswerReceiptRecord) {
+export async function hasFavourite(subscriberWallet: string, creatorWallet: string) {
+  const subscriber = normalizeWalletAddress(subscriberWallet);
+  const creator = normalizeWalletAddress(creatorWallet);
+  if (!subscriber || !creator) return false;
+
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("answer_receipts").insert(record).select("*").single();
-
-  if (error && (error.code === "PGRST204" || error.message.includes("blobs_used") || error.message.includes("receipt_blob_id"))) {
-    const fallbackRecord = {
-      id: record.id,
-      wallet_address: record.wallet_address,
-      query: record.query,
-      answer: record.answer,
-      receipt_hash: record.receipt_hash,
-      onchain_tx_hash: record.onchain_tx_hash,
-      blob_ids_used: record.blob_ids_used
-    };
-    const fallback = await supabase.from("answer_receipts").insert(fallbackRecord).select("*").single();
-
-    if (fallback.error) throw fallback.error;
-    return fallback.data as AnswerReceiptRecord & { id: string };
-  }
+  const { data, error } = await supabase
+    .from("favourites")
+    .select("id")
+    .eq("subscriber_wallet", subscriber)
+    .eq("creator_wallet", creator)
+    .maybeSingle();
 
   if (error) throw error;
-  return data as AnswerReceiptRecord & { id: string };
+  return Boolean(data);
 }
 
-export async function listAnswerReceiptRecords(walletAddress: string, limit: number) {
+export async function getSupporterCount(creatorWallet: string) {
+  const creator = normalizeWalletAddress(creatorWallet);
+  if (!creator) return 0;
+
   const supabase = getSupabaseAdmin();
-
-  async function selectReceipts(matchWallet: boolean, queryLimit: number) {
-    const query = supabase
-      .from("answer_receipts")
-      .select("*");
-
-    const filteredQuery = matchWallet ? query.eq("wallet_address", walletAddress) : query;
-    const ordered = await filteredQuery.order("created_at", { ascending: false }).limit(queryLimit);
-
-    if (!ordered.error) {
-      return (ordered.data ?? []) as AnswerReceiptRecord[];
-    }
-
-    const message = ordered.error.message ?? "";
-    if (!message.includes("created_at") && !message.includes("Could not find") && ordered.error.code !== "PGRST204") {
-      throw ordered.error;
-    }
-
-    const unorderedQuery = supabase
-      .from("answer_receipts")
-      .select("*");
-
-    const unorderedFilteredQuery = matchWallet ? unorderedQuery.eq("wallet_address", walletAddress) : unorderedQuery;
-    const unordered = await unorderedFilteredQuery.limit(queryLimit);
-
-    if (unordered.error) throw unordered.error;
-    return (unordered.data ?? []) as AnswerReceiptRecord[];
-  }
-
-  const exactReceipts = await selectReceipts(true, limit);
-  if (exactReceipts.length > 0) {
-    return exactReceipts;
-  }
-
-  return (await selectReceipts(false, Math.max(limit * 5, 50)))
-    .filter((receipt) => normalizeWalletAddress(receipt.wallet_address) === walletAddress)
-    .slice(0, limit);
-}
-
-export async function listAllAnswerReceiptRecords(limit: number) {
-  const supabase = getSupabaseAdmin();
-  const ordered = await supabase
-    .from("answer_receipts")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (!ordered.error) {
-    return (ordered.data ?? []) as AnswerReceiptRecord[];
-  }
-
-  const message = ordered.error.message ?? "";
-  if (!message.includes("created_at") && !message.includes("Could not find") && ordered.error.code !== "PGRST204") {
-    throw ordered.error;
-  }
-
-  const unordered = await supabase
-    .from("answer_receipts")
-    .select("*")
-    .limit(limit);
-
-  if (unordered.error) throw unordered.error;
-  return (unordered.data ?? []) as AnswerReceiptRecord[];
-}
-
-export async function getDocumentByTxHash(txHash: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("documents").select("*").eq("onchain_tx_hash", txHash).maybeSingle();
+  const { count, error } = await supabase
+    .from("donations")
+    .select("donor_wallet", { count: "exact", head: true })
+    .eq("creator_wallet", creator);
 
   if (error) throw error;
-  return data as DocumentRecord | null;
-}
-
-export async function getReceiptByTxHash(txHash: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("answer_receipts").select("*").eq("onchain_tx_hash", txHash).maybeSingle();
-
-  if (error) throw error;
-  return data as AnswerReceiptRecord | null;
-}
-
-export async function getAnswerReceiptById(id: string) {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("answer_receipts").select("*").eq("id", id).maybeSingle();
-
-  if (error) throw error;
-  return data as (AnswerReceiptRecord & { id: string }) | null;
+  return count ?? 0;
 }

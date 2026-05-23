@@ -1,7 +1,10 @@
-import { AccountAddress } from "@aptos-labs/ts-sdk";
-import { ShelbyBlobClient, createDefaultErasureCodingProvider, generateCommitments } from "@shelby-protocol/sdk/node";
+import { SHELBYUSD_FA_METADATA_ADDRESS } from "@shelby-protocol/sdk/browser";
+import { amountToMicroUnits, microUnitsToAmount, shelbyUsdMicroUnits } from "@/lib/amount";
+import { normalizeWalletAddress } from "@/lib/wallet";
 
 export const shelbyExplorerBaseUrl = "https://explorer.aptoslabs.com/txn";
+export const shelbyUsdMetadataAddress = SHELBYUSD_FA_METADATA_ADDRESS;
+export { amountToMicroUnits, microUnitsToAmount, shelbyUsdMicroUnits };
 
 export function getFullnodeUrl() {
   return process.env.NEXT_PUBLIC_SHELBY_FULLNODE_URL || "https://api.shelbynet.shelby.xyz/v1";
@@ -11,59 +14,19 @@ export function getExplorerUrl(txHash: string) {
   return `${shelbyExplorerBaseUrl}/${encodeURIComponent(txHash)}?network=shelbynet`;
 }
 
-export function getContractAddress() {
-  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-
-  if (!contractAddress) {
-    throw new Error("NEXT_PUBLIC_CONTRACT_ADDRESS is not configured.");
-  }
-
-  return contractAddress;
+function normalizePayloadValue(value: unknown) {
+  if (typeof value === "string") return value.toLowerCase();
+  if (typeof value === "number" || typeof value === "bigint") return value.toString();
+  if (value && typeof value === "object" && "inner" in value) return String((value as { inner: unknown }).inner).toLowerCase();
+  return String(value ?? "").toLowerCase();
 }
 
-export async function createBlobRegistrationPayload(params: {
-  walletAddress: string;
-  blobName: string;
-  blobData: Uint8Array;
-  expirationMicros: number;
-}) {
-  const provider = await createDefaultErasureCodingProvider();
-  const commitments = await generateCommitments(provider, params.blobData);
-
-  return {
-    payload: ShelbyBlobClient.createRegisterBlobPayload({
-      deployer: AccountAddress.from(getContractAddress()),
-      account: AccountAddress.from(params.walletAddress),
-      blobName: params.blobName,
-      blobSize: params.blobData.length,
-      blobMerkleRoot: commitments.blob_merkle_root,
-      expirationMicros: params.expirationMicros,
-      numChunksets: commitments.chunkset_commitments.length,
-      encoding: provider.config.enumIndex
-    }),
-    blobMerkleRoot: commitments.blob_merkle_root,
-    numChunksets: commitments.chunkset_commitments.length
-  };
+function getPayloadParts(payload: Record<string, unknown>) {
+  const args = (payload.arguments ?? payload.functionArguments ?? []) as unknown[];
+  const typeArgs = (payload.type_arguments ?? payload.typeArguments ?? []) as unknown[];
+  const fn = String(payload.function ?? "");
+  return { args, typeArgs, fn };
 }
-
-export function toSerializableTransactionPayload<T>(value: T): T {
-  if (value instanceof Uint8Array) {
-    return Array.from(value) as T;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => toSerializableTransactionPayload(item)) as T;
-  }
-
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, toSerializableTransactionPayload(entry)])
-    ) as T;
-  }
-
-  return value;
-}
-
 
 export async function fetchTransaction(txHash: string) {
   const response = await fetch(`${getFullnodeUrl()}/transactions/by_hash/${encodeURIComponent(txHash)}`, {
@@ -77,18 +40,64 @@ export async function fetchTransaction(txHash: string) {
   return response.json();
 }
 
-export async function waitForTransaction(txHash: string, timeoutMs = 45_000) {
+export async function waitForTransaction(txHash: string, timeoutMs = 60_000) {
   const startedAt = Date.now();
   let lastError: unknown;
 
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      return await fetchTransaction(txHash);
+      const tx = await fetchTransaction(txHash);
+      if (tx?.success === false) throw new Error(tx.vm_status || "Onchain transaction failed.");
+      return tx;
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
     }
   }
 
   throw lastError instanceof Error ? lastError : new Error("Transaction was not found on Shelbynet in time.");
+}
+
+export async function verifyShelbyUsdTransfer(params: {
+  txHash: string;
+  senderWallet: string;
+  recipientWallet: string;
+  expectedAmountMicroUnits: bigint;
+}) {
+  const sender = normalizeWalletAddress(params.senderWallet);
+  const recipient = normalizeWalletAddress(params.recipientWallet);
+  if (!sender || !recipient) throw new Error("Invalid wallet address.");
+
+  const txData = await fetchTransaction(params.txHash);
+  const payload = txData?.payload as Record<string, unknown> | undefined;
+  if (txData?.success !== true || normalizeWalletAddress(txData?.sender) !== sender || !payload) {
+    throw new Error("Invalid transaction.");
+  }
+
+  const { args, typeArgs, fn } = getPayloadParts(payload);
+  let recipientArg = "";
+  let amountArg = "";
+  let assetArg = "";
+
+  if (fn.includes("primary_fungible_store::transfer")) {
+    assetArg = normalizePayloadValue(args[0]);
+    recipientArg = normalizePayloadValue(args[1]);
+    amountArg = normalizePayloadValue(args[2]);
+  } else if (fn.includes("coin::transfer") || fn.includes("aptos_account::transfer_coins")) {
+    assetArg = normalizePayloadValue(typeArgs[0]);
+    recipientArg = normalizePayloadValue(args[0]);
+    amountArg = normalizePayloadValue(args[1]);
+  } else {
+    throw new Error("Invalid transaction function.");
+  }
+
+  if (
+    normalizeWalletAddress(recipientArg) !== recipient ||
+    normalizeWalletAddress(assetArg) !== normalizeWalletAddress(shelbyUsdMetadataAddress) ||
+    BigInt(amountArg) !== params.expectedAmountMicroUnits
+  ) {
+    throw new Error("Invalid transaction.");
+  }
+
+  return txData;
 }
