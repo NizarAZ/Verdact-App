@@ -1,265 +1,435 @@
 # Verdact
 
-> **AI answers you can verify onchain.**
-> Verifiable document intelligence built on Shelby Protocol and Aptos.
+> **Creator storefronts with no platform in the middle.**  
+> A decentralized creator marketplace powered by Shelby Protocol and Aptos.
 
-Verdact is a RAG pipeline where every answer carries cryptographic proof. Documents are registered onchain via the Shelby smart contract. Every AI answer generates a receipt with a hash, wallet address, and source blob references, publicly verifiable by anyone.
+Verdact lets creators publish public storefronts, store content on Shelby Protocol, and receive ShelbyUSD directly from supporters through wallet-to-wallet payments.
 
-**Not just another AI chat. A verifiable knowledge layer.**
+Built for creators, researchers, musicians, artists, educators, and independent publishers who want **public discovery, creator-owned storage, and direct monetization**.
 
-🔗 Live Demo: [verdact.vercel.app](https://verdact.vercel.app)
+---
 
-## The Problem
+## Why Verdact?
 
-Every RAG system has the same trust gap:
+Most creator platforms control the relationship between creators and supporters.
 
-- The app claims it used certain documents
-- You have no way to verify that claim
-- Answers can be fabricated, sources can be swapped
-- No audit trail survives a session
+Verdact gives that relationship back to the wallet.
 
-## The Solution
+Traditional creator platforms often suffer from:
 
-Verdact anchors document registration to the Aptos blockchain via Shelby Protocol's smart contract. Every uploaded document gets a wallet-signed onchain transaction. Every AI answer generates a receipt hash stored with blob references, wallet address, and timestamp — and anyone can re-run the hash check to confirm the answer hasn't changed.
+- Platform fees on every subscription or donation
+- Centralized content storage
+- Account-based identity and audience lock-in
+- Limited portability between platforms
+- Deplatforming risk
+- Opaque payment and access logic
 
+Verdact solves this by combining:
+
+- Decentralized hot storage through Shelby Protocol
+- Petra wallet identity
+- ShelbyUSD wallet-to-wallet payments
+- Public creator marketplace discovery
+- Free and paid creator vaults
+- Supabase metadata for storefronts, subscriptions, donations, and analytics
+
+---
+
+# Core Concept
+
+Create a vault -> upload content -> store on Shelby -> publish a storefront -> get paid directly.
+
+```txt
+Creator
+  |
+  v
+Verdact UI (Next.js)
+  |
+  v
+Creator Vault
+  |
+  +-- Shelby Protocol
+  |     +-- Store content blobs
+  |     +-- Read content client-side
+  |     +-- Register blob metadata onchain
+  |
+  +-- Supabase
+  |     +-- Creator profiles
+  |     +-- Content metadata
+  |     +-- Subscriptions
+  |     +-- Donations
+  |     +-- Favourites
+  |
+  +-- Petra Wallet
+        +-- Sign uploads
+        +-- Pay subscriptions
+        +-- Send donations
 ```
-Upload doc
-    │
-    ▼
-Shelby blob storage          ← document bytes stored on decentralized hot storage
-    │
-    ▼
-Aptos smart contract         ← wallet signs blob_metadata::register_blob tx
-    │
-    ▼
-AI retrieves chunks          ← only onchain-confirmed blobs are queryable
-    │
-    ▼
-Answer + receipt hash        ← SHA-256 of question + answer + blob IDs
-    │
-    ▼
-Public verify link           ← anyone can recompute and confirm
-```
 
-## Key Features
+---
 
-### 🔐 Onchain Document Registration
-Every document upload triggers a wallet-signed transaction on Shelbynet via `blob_metadata::register_blob`. The Aptos transaction hash is stored alongside the document — proof of existence at a specific time, owned by a specific wallet.
+# Features
 
-### 🧠 Verifiable RAG Pipeline
-Only documents confirmed onchain are queryable. The AI retrieves chunks from Shelby blob storage and generates answers grounded in registered sources.
+### Public Creator Marketplace
 
-### 📄 Answer Receipts
-Every query generates a receipt containing:
-- Question and answer
-- Source blob IDs used
-- SHA-256 hash of the full context
-- Wallet address
-- Timestamp
-- Public verification URL
+Verdact opens as a marketplace first.
 
-### ✅ Public Verification
-Anyone with a receipt ID can visit `/verify/[id]` — no wallet, no login required. The page recomputes the receipt hash and confirms it matches. If it does: the answer hasn't changed since it was generated.
+Anyone can browse creator storefronts, discover public preview content, view creator profiles, and explore free or paid vaults without connecting a wallet.
 
-### 🌐 Wallet-Based Identity
-No passwords, no email accounts. Your Petra wallet is your identity. All documents, queries, and receipts are scoped to your connected wallet address.
+---
 
-## Tech Stack
+### Creator Vaults
+
+Creators can set up a vault with:
+
+- Display name
+- Bio
+- Category
+- Avatar
+- Cover image
+- Free or paid access mode
+- Monthly ShelbyUSD price
+- Donation visibility settings
+
+The vault dashboard gives creators a publishing workspace for content, activity, and analytics.
+
+---
+
+### Shelby-Powered Content Storage
+
+Creator content is stored as Shelby blobs instead of platform-owned media files.
+
+Supported content types include:
+
+- MP4
+- MOV
+- MP3
+- WAV
+- JPG
+- PNG
+- GIF
+- PDF
+- TXT
+- Markdown
+- DOCX
+- PPTX
+- CSV
+- JSON
+
+Files are fetched client-side from Shelby and rendered as local object URLs.
+
+---
+
+### Free and Paid Storefronts
+
+Verdact supports two creator models:
+
+- **Free creators** publish public content and accept donations.
+- **Paid creators** lock content behind a monthly ShelbyUSD subscription.
+
+Paid content appears as marketplace listings, but the actual Shelby blob is only fetched after an active subscription check passes.
+
+---
+
+### Direct ShelbyUSD Payments
+
+Subscriptions and donations are wallet-to-wallet payments.
+
+Verdact verifies each Shelbynet transaction before writing anything to Supabase:
+
+- Transaction succeeded
+- Sender matches the supporter wallet
+- Recipient matches the creator wallet
+- Amount matches the expected ShelbyUSD value
+- Asset matches ShelbyUSD
+
+No platform cut. No custodial payment layer.
+
+---
+
+### Creator Analytics
+
+Creators can track:
+
+- Earnings
+- Active subscribers
+- Content views
+- Viewed files
+- Subscriber activity
+- Donation activity
+- Top content
+
+Analytics are designed as a creator intelligence layer, not a generic admin dashboard.
+
+---
+
+# Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14, TypeScript, TailwindCSS |
-| Auth | Petra Wallet (Aptos) via `@aptos-labs/wallet-adapter-react` |
-| Storage | Shelby Protocol SDK (decentralized hot storage on Aptos) |
-| Onchain | Aptos smart contract — `blob_metadata::register_blob` |
-| Database | Supabase (metadata index + receipt storage) |
-| AI | OpenRouter API |
-| Embeddings | Local models (no API cost) |
+| Frontend | Next.js 14, React, TypeScript, TailwindCSS |
+| Wallet | Petra Wallet via `@aptos-labs/wallet-adapter-react` |
+| Storage | Shelby Protocol SDK |
+| Chain | Aptos / Shelbynet |
+| Payments | ShelbyUSD wallet-to-wallet transfers |
+| Database | Supabase |
+| Charts | Recharts |
 | Deployment | Vercel |
 
-## Architecture
+---
 
+# Architecture
+
+```txt
+Frontend (Next.js)
+        |
+        v
+Public Marketplace
+        |
+        +-- Explore creators
+        +-- View storefronts
+        +-- Preview content listings
+        |
+        v
+Creator / Supporter Actions
+        |
+        +-- Petra Wallet
+        |      +-- Sign upload registration
+        |      +-- Pay subscriptions
+        |      +-- Send donations
+        |
+        +-- Shelby SDK
+        |      +-- Upload blobs
+        |      +-- Read blobs client-side
+        |      +-- Register blob metadata
+        |
+        +-- API Routes
+        |      +-- Verify payment transactions
+        |      +-- Save metadata
+        |      +-- Track subscriptions and donations
+        |
+        +-- Supabase
+               +-- Vaults
+               +-- Content
+               +-- Subscriptions
+               +-- Donations
+               +-- Favourites
+               +-- Content views
 ```
-Petra Wallet (user identity)
-        │
-        ▼
-Verdact UI (Next.js)
-        │
-        ▼
-API Routes
-        │
-        ├── Shelby Protocol SDK
-        │      ├── Upload blob → get blob ID
-        │      ├── Retrieve chunks for RAG
-        │      └── Read blob paths for verification
-        │
-        ├── Aptos Smart Contract
-        │      └── blob_metadata::register_blob
-        │             ← wallet signs tx on every upload
-        │             ← tx hash stored as proof of registration
-        │
-        ├── AI Pipeline
-        │      ├── Document chunking
-        │      ├── Local embeddings
-        │      └── Context retrieval + answer generation
-        │
-        └── Supabase
-               ├── Document metadata + onchain_tx_hash
-               └── Answer receipts + receipt_hash
-```
 
-## Getting Started
+---
 
-### Clone
+# Routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Public marketplace homepage |
+| `/explore` | Creator discovery page |
+| `/creator/[wallet]` | Public creator storefront |
+| `/subscribe/[wallet]` | Paid subscription checkout |
+| `/profile` | Connected supporter profile |
+| `/vault` | Private creator workspace |
+| `/vault/upload` | Upload and publish Shelby content |
+| `/vault/settings` | Edit creator profile, assets, pricing, and access |
+| `/vault/analytics` | Creator analytics |
+
+---
+
+# Getting Started
+
+## Clone
 
 ```bash
 git clone https://github.com/NizarAZ/Verdact-App.git
+
 cd Verdact-App
 ```
 
-### Install
+---
+
+## Install
 
 ```bash
 npm install
 ```
 
-### Environment Variables
+---
 
-Create `.env.local`:
+## Environment Variables
+
+Create:
+
+```txt
+.env.local
+```
+
+Add:
 
 ```env
 # Shelby Protocol
-SHELBY_API_KEY=your_key
 NEXT_PUBLIC_CONTRACT_ADDRESS=0x85fdb9a176ab8ef1d9d9c1b60d60b3924f0800ac1de1cc2085fb0b8bb4988e6a
 NEXT_PUBLIC_SHELBY_RPC_URL=https://api.shelbynet.shelby.xyz/shelby
 NEXT_PUBLIC_SHELBY_FULLNODE_URL=https://api.shelbynet.shelby.xyz/v1
+SHELBY_API_KEY=your_key
 
 # Supabase
 SUPABASE_URL=your_url
 SUPABASE_ANON_KEY=your_key
 SUPABASE_SERVICE_ROLE_KEY=your_key
-
-# AI
-OPENROUTER_API_KEY=your_key
 ```
 
-### Database Setup
+---
 
-Run in Supabase SQL Editor:
+## Database Setup
 
-```sql
-CREATE TABLE IF NOT EXISTS documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  wallet_address TEXT NOT NULL,
-  title TEXT,
-  file_name TEXT,
-  file_hash TEXT,
-  blob_id TEXT,
-  onchain_tx_hash TEXT,
-  chunk_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT now()
-);
+Run the schema in Supabase SQL Editor:
 
-CREATE TABLE IF NOT EXISTS answer_receipts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  wallet_address TEXT NOT NULL,
-  query TEXT NOT NULL,
-  answer TEXT NOT NULL,
-  receipt_hash TEXT NOT NULL,
-  onchain_tx_hash TEXT,
-  blob_ids_used TEXT[],
-  document_id UUID REFERENCES documents(id),
-  created_at TIMESTAMP DEFAULT now()
-);
-
-ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
-ALTER TABLE answer_receipts DISABLE ROW LEVEL SECURITY;
+```txt
+scripts/supabase-onchain-schema.sql
 ```
 
-### Run Locally
+The schema creates:
+
+- `vaults`
+- `content`
+- `subscriptions`
+- `donations`
+- `favourites`
+- `content_views`
+
+It also removes the old RAG tables:
+
+- `documents`
+- `answer_receipts`
+
+---
+
+## Run Locally
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000` and connect your Petra wallet set to Shelbynet.
+Open:
 
-## Wallet Setup (Shelbynet)
-
-1. Install [Petra Wallet](https://petra.app)
-2. Open Settings → Network → Switch to **Shelbynet**
-3. Get free testnet tokens from the Shelby faucet: [docs.shelby.xyz/tools/wallets/petra-setup](https://docs.shelby.xyz/tools/wallets/petra-setup)
-   - APT tokens (for gas fees)
-   - ShelbyUSD tokens (for blob storage)
-
-## How Verification Works
-
-Every answer at Verdact is independently verifiable:
-
-1. Ask a question → AI answers using registered document chunks
-2. A receipt is saved: `{ question, answer, blob_ids_used, wallet_address, timestamp }`
-3. A SHA-256 hash of the receipt is computed and stored
-4. Anyone visits `/verify/[receipt_id]`
-5. The page re-fetches the receipt and recomputes the hash
-6. If `recomputed_hash === stored_hash` → **answer unchanged**
-7. Source blobs link to Shelby Explorer for onchain confirmation
-
-## Project Structure
-
+```txt
+http://localhost:3000
 ```
+
+Connect Petra Wallet when you want to publish, subscribe, donate, favourite, or manage a vault.
+
+---
+
+# Wallet Setup
+
+1. Install Petra Wallet
+2. Switch to Shelbynet
+3. Fund the wallet with testnet gas
+4. Use ShelbyUSD for subscriptions and donations
+
+---
+
+# Project Structure
+
+```txt
 Verdact-App/
-│
-├── app/
-│   ├── api/
-│   │   ├── upload/          ← Shelby blob upload + onchain registration
-│   │   ├── query/           ← RAG pipeline + receipt generation
-│   │   ├── documents/       ← document list by wallet
-│   │   └── stats/           ← dashboard stats by wallet
-│   │
-│   ├── app/                 ← authenticated app routes
-│   │   ├── upload/
-│   │   ├── query/
-│   │   ├── receipts/
-│   │   └── verify/
-│   │
-│   └── verify/[id]/         ← public verification page (no login required)
-│
-├── components/
-│   ├── dashboard/
-│   ├── verify/
-│   └── WalletProvider.tsx
-│
-├── lib/
-│   ├── shelby/              ← Shelby SDK integration
-│   ├── onchain.ts           ← Aptos smart contract calls
-│   ├── ai/                  ← RAG pipeline
-│   ├── supabase/
-│   └── document-processing/
-│
-├── scripts/
-│   └── supabase-onchain-schema.sql
-│
-└── middleware.ts
+|
++-- app/
+|   +-- api/
+|   |   +-- content/
+|   |   +-- creators/
+|   |   +-- donations/
+|   |   +-- favourites/
+|   |   +-- profile/
+|   |   +-- shelby/
+|   |   +-- subscriptions/
+|   |   +-- vault/
+|   |
+|   +-- creator/
+|   +-- explore/
+|   +-- profile/
+|   +-- subscribe/
+|   +-- vault/
+|
++-- components/
+|   +-- creator/
+|   +-- marketplace/
+|   +-- profile/
+|   +-- shared/
+|   +-- ui/
+|   +-- vault/
+|   +-- wallet/
+|
++-- lib/
+|   +-- amount.ts
+|   +-- client-chain.ts
+|   +-- constants.ts
+|   +-- format.ts
+|   +-- onchain.ts
+|   +-- shelby-browser.ts
+|   +-- supabase-server.ts
+|   +-- wallet.ts
+|
++-- public/
++-- scripts/
 ```
 
-## Roadmap
+---
 
-- [ ] Vector semantic search (upgrade from keyword chunking)
-- [ ] Multi-document cross-querying
-- [ ] Encrypted private knowledge vaults
-- [ ] Team-level shared document workspaces
-- [ ] AI workflow automation with receipt chains
-- [ ] Mobile wallet support (beyond Petra)
-- [ ] Export receipts as signed PDF certificates
+# Current Capabilities
 
-## Vision
+- Public creator marketplace
+- Creator storefront pages
+- Free creator donations
+- Paid creator subscriptions
+- Active subscription checks
+- Shelby blob upload and read flow
+- Creator vault setup
+- Creator content upload
+- File settings management
+- Profile avatar and cover uploads
+- Supporter profile
+- Favourites
+- Creator analytics
+- Vercel deployment
 
-> AI systems that answer, remember, and prove.
+---
 
-Verdact is infrastructure for a world where AI answers are not trusted by default — they are verified by design. Every answer carries its evidence. Every source is traceable to the chain.
+# Roadmap
 
-## License
+- Creator discovery ranking
+- Better media thumbnails and transcoding
+- Storefront customization
+- Subscription renewal reminders
+- Creator collections and bundles
+- Encrypted private drops
+- Multi-wallet support
+- Shelby Explorer links for every published blob
+- Better creator payout reporting
+
+---
+
+# Vision
+
+Verdact is building infrastructure for:
+
+> Public creator marketplaces where content storage, audience access, and payments belong to the creator.
+
+Not another platform with a creator dashboard.  
+A marketplace where creators own the vault, the audience, and the wallet relationship.
+
+---
+
+# Live Demo
+
+https://verdact.vercel.app/
+
+---
+
+# License
 
 MIT
 
-Built on [Shelby Protocol](https://shelby.xyz) ⚡ · Powered by [Aptos](https://aptos.dev)
+---
+
+Built on Shelby Protocol and Aptos.
