@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="Finance lane cover">
+  <defs>
+    <linearGradient id="desk" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#dbe9ef"/>
+      <stop offset="0.5" stop-color="#f2efe1"/>
+      <stop offset="1" stop-color="#b7c0b5"/>
+    </linearGradient>
+    <linearGradient id="bill" x1="0" x2="1">
+      <stop offset="0" stop-color="#ece1bd"/>
+      <stop offset="1" stop-color="#b9c38d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="420" fill="url(#desk)"/>
+  <g transform="translate(420 24) rotate(8)">
+    <rect width="520" height="330" fill="#f8f4e8" stroke="#98a08e" stroke-width="2"/>
+    <g stroke-width="4" fill="none">
+      <path d="M40 270 L110 196 L174 226 L250 122 L340 158 L448 54" stroke="#208a6a"/>
+      <path d="M40 246 L114 218 L176 180 L250 184 L340 102 L448 126" stroke="#3470ac"/>
+    </g>
+    <g fill="#2f77b4" opacity="0.9">
+      <rect x="70" y="290" width="28" height="26"/>
+      <rect x="140" y="260" width="28" height="56"/>
+      <rect x="210" y="226" width="28" height="90"/>
+      <rect x="280" y="202" width="28" height="114"/>
+      <rect x="350" y="168" width="28" height="148"/>
+      <rect x="420" y="132" width="28" height="184"/>
+    </g>
+    <g stroke="#9a8360" stroke-width="1" opacity="0.55">
+      <path d="M40 316 H480"/>
+      <path d="M40 252 H480"/>
+      <path d="M40 188 H480"/>
+      <path d="M40 124 H480"/>
+      <path d="M40 60 H480"/>
+    </g>
+  </g>
+  <g transform="translate(98 88) rotate(-14)">
+    <rect width="395" height="180" rx="4" fill="url(#bill)" stroke="#7c886a" stroke-width="4"/>
+    <rect x="26" y="24" width="343" height="132" rx="3" fill="none" stroke="#6e7c5d" stroke-width="3"/>
+    <circle cx="198" cy="90" r="48" fill="none" stroke="#6e7c5d" stroke-width="6"/>
+    <text x="175" y="108" fill="#59664c" font-family="Georgia,serif" font-size="56">$</text>
+    <g fill="#59664c" opacity="0.75">
+      <rect x="50" y="48" width="82" height="10"/>
+      <rect x="50" y="70" width="62" height="8"/>
+      <rect x="262" y="48" width="82" height="10"/>
+      <rect x="282" y="70" width="62" height="8"/>
+    </g>
+  </g>
+  <g transform="translate(850 46) rotate(-18)" stroke="#20201c" stroke-width="9" stroke-linecap="round">
+    <path d="M24 26 L178 180"/>
+    <path d="M178 180 L206 242"/>
+    <path d="M178 180 L118 156"/>
+  </g>
+  <rect x="0" y="0" width="1200" height="420" fill="none" stroke="#8f7c59" stroke-opacity="0.22"/>
+</svg>

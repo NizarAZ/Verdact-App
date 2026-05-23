@@ -11,9 +11,7 @@ export async function waitForShelbynetTransaction(txHash: string) {
 
     if (response.ok) {
       const tx = await response.json();
-      if (tx?.success === false) {
-        throw new Error(tx?.vm_status || "Onchain transaction failed.");
-      }
+      if (tx?.success === false) throw new Error(tx?.vm_status || "Onchain transaction failed.");
       return tx;
     }
 
