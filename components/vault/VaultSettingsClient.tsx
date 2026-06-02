@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Image as ImageIcon, Radio, Wallet } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
@@ -33,6 +33,11 @@ export function VaultSettingsClient() {
     avatar_blob_id: false,
     cover_blob_id: false
   });
+  const latestFormRef = useRef<any | null>(null);
+
+  useEffect(() => {
+    latestFormRef.current = form;
+  }, [form]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -92,16 +97,17 @@ export function VaultSettingsClient() {
         onStatus: setStatus
       });
 
-      const nextForm = { ...form, [field]: blobName };
+      const nextForm = { ...(latestFormRef.current ?? form), [field]: blobName };
       setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} uploaded. Saving storefront.`);
       const response = await walletFetch("/api/vault/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextForm)
+        body: JSON.stringify({ [field]: blobName })
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Failed to save image metadata.");
-      setForm(json.vault);
+      setForm({ ...nextForm, ...json.vault });
+      latestFormRef.current = { ...nextForm, ...json.vault };
       setAssetPreview((current) => ({ ...current, [field]: undefined }));
       URL.revokeObjectURL(previewUrl);
       setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} saved.`);

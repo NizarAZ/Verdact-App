@@ -64,7 +64,7 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   return (
-    <AptosWalletAdapterProvider autoConnect={false} optInWallets={["Petra"]} onError={() => undefined}>
+    <AptosWalletAdapterProvider autoConnect={true} optInWallets={["Petra"]} onError={() => undefined}>
       <WalletContextBridge>{children}</WalletContextBridge>
     </AptosWalletAdapterProvider>
   );

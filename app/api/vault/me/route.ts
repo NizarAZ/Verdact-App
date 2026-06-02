@@ -19,6 +19,10 @@ function cleanPrice(value: unknown) {
   return Number.isFinite(price) && price >= 0 ? price : 0;
 }
 
+function hasOwn(object: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
 export async function GET(request: Request) {
   try {
     const walletAddress = getWalletAddress(request);
@@ -101,20 +105,42 @@ export async function PATCH(request: Request) {
   try {
     const walletAddress = getWalletAddress(request);
     const body = await request.json().catch(() => ({}));
-    const isPaid = Boolean(body.is_paid);
     const supabase = getSupabaseAdmin();
+    const existingVault = await getVaultByWallet(walletAddress);
+    if (!existingVault) {
+      return NextResponse.json({ error: "Creator vault does not exist." }, { status: 404 });
+    }
+
+    const isPaid = hasOwn(body, "is_paid") ? Boolean(body.is_paid) : Boolean(existingVault.is_paid);
+    const displayName = hasOwn(body, "display_name")
+      ? cleanString(body.display_name, 80) || "Untitled creator"
+      : existingVault.display_name || "Untitled creator";
+    const bio = hasOwn(body, "bio") ? cleanString(body.bio, 600) : existingVault.bio;
+    const category = hasOwn(body, "category") ? cleanCategory(body.category) : existingVault.category || "Other";
+    const avatarBlobId = hasOwn(body, "avatar_blob_id")
+      ? cleanString(body.avatar_blob_id, 300) || null
+      : existingVault.avatar_blob_id;
+    const coverBlobId = hasOwn(body, "cover_blob_id")
+      ? cleanString(body.cover_blob_id, 300) || null
+      : existingVault.cover_blob_id;
 
     const { data, error } = await supabase
       .from("vaults")
       .update({
-        display_name: cleanString(body.display_name, 80) || "Untitled creator",
-        bio: cleanString(body.bio, 600),
-        category: cleanCategory(body.category),
-        avatar_blob_id: cleanString(body.avatar_blob_id, 300) || null,
-        cover_blob_id: cleanString(body.cover_blob_id, 300) || null,
+        display_name: displayName,
+        bio,
+        category,
+        avatar_blob_id: avatarBlobId,
+        cover_blob_id: coverBlobId,
         is_paid: isPaid,
-        price_monthly: isPaid ? cleanPrice(body.price_monthly) : 0,
-        show_donation_total: body.show_donation_total !== false
+        price_monthly: isPaid
+          ? hasOwn(body, "price_monthly")
+            ? cleanPrice(body.price_monthly)
+            : cleanPrice(existingVault.price_monthly)
+          : 0,
+        show_donation_total: hasOwn(body, "show_donation_total")
+          ? body.show_donation_total !== false
+          : existingVault.show_donation_total !== false
       })
       .eq("wallet_address", walletAddress)
       .select("*")
