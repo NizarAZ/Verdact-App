@@ -7,6 +7,10 @@ import { getWalletAddress } from "@/lib/wallet";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function getClient() {
   return new ShelbyClient({
     network: Network.SHELBYNET,
@@ -34,17 +38,27 @@ export async function POST(request: Request) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await getClient().rpc.putBlob({
-      account: AccountAddress.from(walletAddress),
-      blobName,
-      blobData: bytes,
-      totalBytes: bytes.length
-    });
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await getClient().rpc.putBlob({
+          account: AccountAddress.from(walletAddress),
+          blobName,
+          blobData: bytes,
+          totalBytes: bytes.length
+        });
+        return NextResponse.json({ ok: true });
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) await sleep(2000 + attempt * 3000);
+      }
+    }
 
-    return NextResponse.json({ ok: true });
+    throw lastError;
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Shelby upload failed.";
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Shelby upload failed." },
+      { error: message },
       { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 500 }
     );
   }

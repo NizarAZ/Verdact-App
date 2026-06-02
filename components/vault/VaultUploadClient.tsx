@@ -5,10 +5,11 @@ import { useMemo, useState } from "react";
 import { Check, FileArchive, FileUp, Lock, Radio, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/components/WalletProvider";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { BackLink } from "@/components/ui/BackLink";
 import { acceptedUploadTypes, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
-import { createClientBlobRegistration, putShelbyBlob, putShelbyBlobViaServer } from "@/lib/shelby-browser";
+import { createClientBlobRegistration, putShelbyBlobWithRetry, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
@@ -79,15 +80,21 @@ export function VaultUploadClient() {
       setStep("signing");
       const tx = await signAndSubmitTransaction(payload);
       await waitForShelbynetTransaction(tx.hash);
+      setStatus("Waiting for Shelby registration to become available.");
+      await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
 
       setStep("uploading");
-      try {
-        await putShelbyBlob({ walletAddress: address, blobName, blobData: bytes });
-      } catch {
-        await putShelbyBlobViaServer({ blobName, file, walletFetch });
-      }
+      await putShelbyBlobWithRetry({
+        walletAddress: address,
+        blobName,
+        blobData: bytes,
+        file,
+        walletFetch,
+        onStatus: setStatus
+      });
 
       setStep("confirmed");
+      setStatus("Saving storefront metadata.");
       const response = await walletFetch("/api/vault/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,6 +128,9 @@ export function VaultUploadClient() {
           <div className="vault-empty p-8">
             <h1 className="font-display text-6xl leading-none">Connect Petra to publish.</h1>
             <p className="mt-4 max-w-lg text-sm leading-6 text-text-tertiary">Uploads register Shelby blobs from the connected wallet before metadata is saved to Verdact.</p>
+            <div className="relative z-10 mt-6">
+              <WalletButton />
+            </div>
           </div>
         </section>
       </main>

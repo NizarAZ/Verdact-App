@@ -17,6 +17,7 @@ import {
   YAxis
 } from "recharts";
 import { useWallet } from "@/components/WalletProvider";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { BackLink } from "@/components/ui/BackLink";
 import { formatAmount, truncateMiddle } from "@/lib/format";
 
@@ -111,6 +112,9 @@ export function VaultAnalyticsClient() {
           <div className="vault-empty p-8">
             <h1 className="font-display text-6xl leading-none">Connect Petra to view creator intelligence.</h1>
             <p className="mt-4 max-w-lg text-sm leading-6 text-text-tertiary">Analytics belongs to the vault owner. Public marketplace browsing remains open without a wallet.</p>
+            <div className="relative z-10 mt-6">
+              <WalletButton />
+            </div>
           </div>
         </section>
       </main>

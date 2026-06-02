@@ -78,6 +78,85 @@ export async function putShelbyBlob(params: {
   });
 }
 
+export async function waitForShelbyBlobMetadata(params: {
+  walletAddress: string;
+  blobName: string;
+  timeoutMs?: number;
+}) {
+  const client = getShelbyBrowserClient();
+  const account = AccountAddress.from(params.walletAddress);
+  const deadline = Date.now() + (params.timeoutMs ?? 30_000);
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const metadata = await client.coordination.getBlobMetadata({
+        account,
+        name: params.blobName
+      });
+      if (metadata) return metadata;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1500));
+  }
+
+  if (lastError instanceof Error) {
+    throw new Error(`Shelby blob registration was not visible yet: ${lastError.message}`);
+  }
+  throw new Error("Shelby blob registration was not visible yet.");
+}
+
+export async function putShelbyBlobWithRetry(params: {
+  walletAddress: string;
+  blobName: string;
+  blobData: Uint8Array;
+  file: File;
+  walletFetch: typeof fetch;
+  onStatus?: (status: string) => void;
+  onProgress?: (progress: { phase: string; uploadedBytes: number; totalBytes: number }) => void;
+}) {
+  const attempts = [
+    { mode: "browser", delayMs: 0 },
+    { mode: "browser", delayMs: 2500 },
+    { mode: "server", delayMs: 4000 },
+    { mode: "server", delayMs: 7000 }
+  ] as const;
+  let lastError: unknown;
+
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
+    if (attempt.delayMs > 0) {
+      params.onStatus?.(`Shelby storage is finalizing. Retrying upload ${index + 1}/${attempts.length}.`);
+      await new Promise((resolve) => window.setTimeout(resolve, attempt.delayMs));
+    } else {
+      params.onStatus?.("Uploading bytes to Shelby storage.");
+    }
+
+    try {
+      if (attempt.mode === "browser") {
+        await putShelbyBlob({
+          walletAddress: params.walletAddress,
+          blobName: params.blobName,
+          blobData: params.blobData,
+          onProgress: params.onProgress
+        });
+      } else {
+        await putShelbyBlobViaServer({
+          blobName: params.blobName,
+          file: params.file,
+          walletFetch: params.walletFetch
+        });
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(lastError instanceof Error ? lastError.message : "Shelby upload failed after retries.");
+}
+
 export async function putShelbyBlobViaServer(params: {
   blobName: string;
   file: File;

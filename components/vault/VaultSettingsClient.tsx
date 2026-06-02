@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Camera, Check, Image as ImageIcon, Radio, Wallet } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
+import { WalletButton } from "@/components/wallet/WalletButton";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
 import { BackLink } from "@/components/ui/BackLink";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { categories } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
-import { createClientBlobRegistration, putShelbyBlob, putShelbyBlobViaServer } from "@/lib/shelby-browser";
+import { createClientBlobRegistration, putShelbyBlobWithRetry, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
 import { truncateMiddle } from "@/lib/format";
 
 function cleanName(name: string) {
@@ -63,7 +64,7 @@ export function VaultSettingsClient() {
   }
 
   async function uploadAsset(field: "avatar_blob_id" | "cover_blob_id", file?: File | null) {
-    if (!file || !address) return;
+    if (!file || !address || !form) return;
     setStatus(field === "avatar_blob_id" ? "Uploading avatar to Shelby." : "Uploading cover to Shelby.");
     setAssetUploads((current) => ({ ...current, [field]: true }));
     const previewUrl = URL.createObjectURL(file);
@@ -80,13 +81,30 @@ export function VaultSettingsClient() {
       });
       const tx = await signAndSubmitTransaction(payload);
       await waitForShelbynetTransaction(tx.hash);
-      try {
-        await putShelbyBlob({ walletAddress: address, blobName, blobData: bytes });
-      } catch {
-        await putShelbyBlobViaServer({ blobName, file, walletFetch });
-      }
-      setForm((current: any) => ({ ...current, [field]: blobName }));
-      setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} uploaded. Save settings to publish it.`);
+      setStatus("Waiting for Shelby registration to become available.");
+      await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
+      await putShelbyBlobWithRetry({
+        walletAddress: address,
+        blobName,
+        blobData: bytes,
+        file,
+        walletFetch,
+        onStatus: setStatus
+      });
+
+      const nextForm = { ...form, [field]: blobName };
+      setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} uploaded. Saving storefront.`);
+      const response = await walletFetch("/api/vault/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextForm)
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error || "Failed to save image metadata.");
+      setForm(json.vault);
+      setAssetPreview((current) => ({ ...current, [field]: undefined }));
+      URL.revokeObjectURL(previewUrl);
+      setStatus(`${field === "avatar_blob_id" ? "Avatar" : "Cover"} saved.`);
     } catch (error) {
       URL.revokeObjectURL(previewUrl);
       setAssetPreview((current) => ({ ...current, [field]: undefined }));
@@ -104,6 +122,9 @@ export function VaultSettingsClient() {
           <div className="vault-empty p-8">
             <h1 className="font-display text-6xl leading-none">Connect Petra to edit the vault.</h1>
             <p className="mt-4 max-w-lg text-sm leading-6 text-text-tertiary">Settings are wallet-owned and update the public storefront metadata.</p>
+            <div className="relative z-10 mt-6">
+              <WalletButton />
+            </div>
           </div>
         </section>
       </main>
