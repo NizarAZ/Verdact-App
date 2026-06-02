@@ -4,7 +4,8 @@ import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { ArrowUpRight, Eye, FileText, Image as ImageIcon, LockKeyhole, Music, Play, Sparkles, Wallet } from "lucide-react";
+import { ArrowUpRight, BadgeDollarSign, Eye, FileText, Image as ImageIcon, LockKeyhole, Music, Play, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { PublicNav } from "@/components/marketplace/PublicNav";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
 import { formatAmount, truncateMiddle } from "@/lib/format";
@@ -52,6 +53,13 @@ const featuredLanes = [
   }
 ];
 
+const trustBadges: Array<{ label: string; icon: LucideIcon }> = [
+  { label: "Stored on Shelby", icon: ShieldCheck },
+  { label: "Paid with ShelbyUSD", icon: BadgeDollarSign },
+  { label: "Wallet-owned access", icon: Wallet },
+  { label: "No wallet needed to browse", icon: Search }
+];
+
 function PreviewIcon({ type }: { type?: string | null }) {
   const Icon = type?.startsWith("video/")
     ? Play
@@ -65,6 +73,8 @@ function PreviewIcon({ type }: { type?: string | null }) {
 
 function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; featured?: boolean }) {
   const initials = (creator.display_name || creator.wallet_address || "V").slice(0, 1);
+  const latestPreview = creator.latest_preview_content[0];
+  const hasPreviews = creator.latest_preview_content.length > 0;
 
   return (
     <Link
@@ -107,7 +117,7 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
           />
         </div>
         <span className="pointer-events-none absolute right-5 top-5 border border-[color:var(--market-border)] bg-[color:var(--market-bg)] px-3 py-2 font-mono text-[11px] text-[color:var(--market-accent)]">
-          {creator.is_paid ? `${formatAmount(creator.price_monthly)} / month` : "FREE"}
+          {creator.is_paid ? `${formatAmount(creator.price_monthly)} ShelbyUSD/month` : "FREE + DONATIONS"}
         </span>
       </div>
 
@@ -117,20 +127,21 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
             <h2 className={`${featured ? "text-6xl" : "text-4xl"} truncate font-display leading-none text-[color:var(--market-text)]`}>
               {creator.display_name || "Untitled creator"}
             </h2>
-            <p className="mt-2 font-mono text-xs text-[color:var(--market-muted)]">{truncateMiddle(creator.wallet_address)}</p>
+            <p className="mt-2 font-mono text-xs text-[color:var(--market-muted)]">wallet / {truncateMiddle(creator.wallet_address)}</p>
           </div>
           <ArrowUpRight className="mt-1 h-5 w-5 shrink-0 text-[color:var(--market-muted)] transition-colors group-hover:text-[color:var(--market-accent)]" />
         </div>
         <p className={`${featured ? "min-h-[72px] text-base leading-6" : "min-h-[64px] text-sm leading-5"} mt-5 line-clamp-3 text-[color:var(--market-muted)]`}>
           {creator.bio || "Public Shelby storefront waiting for its first creator note."}
         </p>
-        <div className="mt-5 flex flex-wrap gap-2 font-mono text-[11px] text-[color:var(--market-text)]">
-          <span className="border border-[color:var(--market-border)] px-2 py-1">{creator.category || "Other"}</span>
-          <span className="border border-[color:var(--market-border)] px-2 py-1">{creator.content_count} files</span>
-          <span className="border border-[color:var(--market-border)] px-2 py-1">{creator.subscriber_count} subscribers</span>
+        <div className="mt-5 grid grid-cols-2 border border-[color:var(--market-border)] font-mono text-[11px] text-[color:var(--market-muted)] sm:grid-cols-4">
+          <span className="border-b border-r border-[color:var(--market-border)] px-2 py-2 sm:border-b-0">{creator.category || "Other"}</span>
+          <span className="border-b border-r border-[color:var(--market-border)] px-2 py-2 sm:border-b-0">{creator.is_paid ? "paid vault" : "free storefront"}</span>
+          <span className="border-r border-[color:var(--market-border)] px-2 py-2">{creator.content_count} files</span>
+          <span className="px-2 py-2">{creator.subscriber_count} subscribers</span>
         </div>
         <div className="mt-5 border-t border-[color:var(--market-border)] pt-4">
-          {creator.latest_preview_content.length > 0 ? (
+          {hasPreviews ? (
             <div className="grid gap-2">
               {creator.latest_preview_content.slice(0, featured ? 4 : 3).map((item) => (
                 <div key={item.id} className="flex items-center gap-2 font-mono text-xs text-[color:var(--market-muted)]">
@@ -140,8 +151,18 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
               ))}
             </div>
           ) : (
-            <p className="font-mono text-xs text-[color:var(--market-muted)]">No public previews yet</p>
+            <p className="font-mono text-xs text-[color:var(--market-muted)]">
+              {creator.content_count > 0
+                ? `${creator.content_count} files uploaded. Public previews coming soon.`
+                : "Private vault active. First public preview coming soon."}
+            </p>
           )}
+        </div>
+        <div className="mt-5 flex items-center justify-between gap-3 border-t border-[color:var(--market-border)] pt-4">
+          <span className="truncate font-mono text-xs text-[color:var(--market-muted)]">
+            {latestPreview ? `Latest / ${latestPreview.title}` : creator.is_paid ? "Subscribe to unlock full vault" : "Open public storefront"}
+          </span>
+          <span className="shrink-0 font-mono text-xs text-[color:var(--market-accent)]">View storefront</span>
         </div>
       </div>
     </Link>
@@ -151,7 +172,7 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
 function FeedRow({ creator, index }: { creator: CreatorCard; index: number }) {
   const preview = creator.latest_preview_content[0];
   return (
-    <Link href={`/creator/${creator.wallet_address}`} data-reveal className="market-panel grid gap-4 p-4 transition-colors hover:border-[color:var(--market-accent)] md:grid-cols-[auto_1fr_auto] md:items-center">
+    <Link href={`/creator/${creator.wallet_address}`} data-reveal className="market-panel group grid gap-4 p-4 transition-colors hover:border-[color:var(--market-accent)] md:grid-cols-[auto_1fr_auto] md:items-center">
       <span className="font-display text-5xl leading-none text-[color:var(--market-muted)]">{String(index + 1).padStart(2, "0")}</span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -160,13 +181,17 @@ function FeedRow({ creator, index }: { creator: CreatorCard; index: number }) {
           <span className="border border-[color:var(--market-border)] px-2 py-1 font-mono text-[10px] text-[color:var(--market-accent)]">{creator.is_paid ? `${formatAmount(creator.price_monthly)} / month` : "FREE"}</span>
         </div>
         <p className="mt-2 truncate font-mono text-xs text-[color:var(--market-muted)]">
-          {preview ? `Latest preview / ${preview.title}` : `No public previews yet / ${truncateMiddle(creator.wallet_address)}`}
+          {preview ? `Recent public preview / ${preview.title}` : creator.content_count > 0 ? `${creator.content_count} vault files / public preview not published yet` : `Storefront open / ${truncateMiddle(creator.wallet_address)}`}
         </p>
       </div>
-      <div className="flex items-center gap-3 font-mono text-xs text-[color:var(--market-muted)]">
-        <span className="inline-flex items-center gap-1"><FileText className="h-3.5 w-3.5 text-[color:var(--market-accent)]" />{creator.content_count}</span>
-        <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5 text-[color:var(--market-accent)]" />{creator.subscriber_count}</span>
-        {creator.is_paid ? <LockKeyhole className="h-4 w-4 text-[color:var(--market-accent)]" /> : null}
+      <div className="flex flex-wrap items-center gap-3 font-mono text-xs text-[color:var(--market-muted)]">
+        <span className="inline-flex items-center gap-1" title="Published files"><FileText className="h-3.5 w-3.5 text-[color:var(--market-accent)]" />{creator.content_count} files</span>
+        <span className="inline-flex items-center gap-1" title="Active subscribers"><Eye className="h-3.5 w-3.5 text-[color:var(--market-accent)]" />{creator.subscriber_count} subscribers</span>
+        <span className="inline-flex items-center gap-1" title={creator.is_paid ? "Paid vault" : "Free storefront"}>
+          {creator.is_paid ? <LockKeyhole className="h-4 w-4 text-[color:var(--market-accent)]" /> : <Wallet className="h-4 w-4 text-[color:var(--market-accent)]" />}
+          {creator.is_paid ? "paid" : "free"}
+        </span>
+        <ArrowUpRight className="h-4 w-4 text-[color:var(--market-muted)] transition-colors group-hover:text-[color:var(--market-accent)]" />
       </div>
     </Link>
   );
@@ -208,7 +233,7 @@ function LatestDropCard({ creator, item, index }: { creator: CreatorCard; item: 
   );
 }
 
-function LaneFeatureCard({ lane, index }: { lane: (typeof featuredLanes)[number]; index: number }) {
+function LaneFeatureCard({ lane, index, creatorCount, fileCount }: { lane: (typeof featuredLanes)[number]; index: number; creatorCount: number; fileCount: number }) {
   return (
     <Link
       href={`/?category=${encodeURIComponent(lane.category)}`}
@@ -221,10 +246,17 @@ function LaneFeatureCard({ lane, index }: { lane: (typeof featuredLanes)[number]
         <span className="market-lane-index">{String(index + 1).padStart(2, "0")}</span>
       </div>
       <div className="market-lane-body">
-        <p className="font-display text-5xl leading-none text-[color:var(--market-text)]">{lane.title}</p>
+        <div className="flex items-start justify-between gap-4">
+          <p className="font-display text-5xl leading-none text-[color:var(--market-text)]">{lane.title}</p>
+          <ArrowUpRight className="h-5 w-5 shrink-0 text-[color:var(--market-muted)] transition-colors group-hover:text-[color:var(--market-accent)]" />
+        </div>
         <p className="mt-4 text-sm leading-6 text-[color:var(--market-muted)]">{lane.note}</p>
-        <p className="mt-8 border-t border-[color:var(--market-border)] pt-4 font-mono text-xs text-[color:var(--market-accent)]">
-          open lane
+        <div className="mt-6 grid grid-cols-2 border border-[color:var(--market-border)] font-mono text-xs text-[color:var(--market-muted)]">
+          <span className="border-r border-[color:var(--market-border)] p-3">{creatorCount} creators</span>
+          <span className="p-3">{fileCount} files</span>
+        </div>
+        <p className="mt-5 border-t border-[color:var(--market-border)] pt-4 font-mono text-xs text-[color:var(--market-accent)]">
+          Filter {lane.category}
         </p>
       </div>
     </Link>
@@ -233,7 +265,7 @@ function LaneFeatureCard({ lane, index }: { lane: (typeof featuredLanes)[number]
 
 export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) {
   const spotlight = creators[0];
-  const gridCreators = creators.slice(spotlight ? 1 : 0);
+  const gridCreators = creators;
   const feedCreators = creators.slice(0, 7);
   const latestDrops = useMemo(() => creators.flatMap((creator) => creator.latest_preview_content.map((item) => ({ creator, item }))).slice(0, 6), [creators]);
   const categorySummary = useMemo(() => {
@@ -241,6 +273,23 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
     for (const creator of creators) counts.set(creator.category || "Other", (counts.get(creator.category || "Other") ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [creators]);
+  const categoryStats = useMemo(() => {
+    const stats = new Map<string, { creators: number; files: number }>();
+    for (const creator of creators) {
+      const category = creator.category || "Other";
+      const current = stats.get(category) ?? { creators: 0, files: 0 };
+      current.creators += 1;
+      current.files += creator.content_count;
+      stats.set(category, current);
+    }
+    return stats;
+  }, [creators]);
+  const totals = useMemo(() => ({
+    creators: creators.length,
+    files: creators.reduce((total, creator) => total + creator.content_count, 0),
+    paid: creators.filter((creator) => creator.is_paid).length,
+    previews: creators.reduce((total, creator) => total + creator.latest_preview_content.length, 0)
+  }), [creators]);
 
   useEffect(() => {
     if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -314,14 +363,19 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
             Creator storefronts with no platform in the middle.
           </h1>
           <p data-hero-copy className="mt-8 max-w-2xl text-xl leading-8 text-[color:var(--market-muted)]">
-            Browse public previews, discover paid vaults, and support creators directly from wallet to wallet on Shelby.
+            Creator storefronts with no platform in the middle. Browse public previews, discover paid vaults, and support creators directly from wallet to wallet on Shelby.
           </p>
+          <div data-hero-copy className="market-hero-stats mt-8">
+            <div><strong>{totals.creators}</strong><span>storefronts</span></div>
+            <div><strong>{totals.previews}</strong><span>public previews</span></div>
+            <div><strong>{totals.paid}</strong><span>paid vaults</span></div>
+          </div>
           <div data-hero-copy className="mt-9 flex flex-wrap gap-3">
             <Link href="#creator-grid" className="interactive-control inline-flex min-h-12 items-center gap-3 bg-[color:var(--market-action)] px-5 font-mono text-sm text-[color:var(--market-text)]">
-              Browse storefronts <ArrowUpRight className="h-4 w-4" />
+              Explore creators <ArrowUpRight className="h-4 w-4" />
             </Link>
             <Link href="/vault" className="interactive-control inline-flex min-h-12 items-center border border-[color:var(--market-border)] px-5 font-mono text-sm text-[color:var(--market-text)]">
-              Open creator vault
+              Start creator vault
             </Link>
           </div>
         </div>
@@ -367,7 +421,7 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
             <div key={item.category} data-reveal className="market-panel min-h-[220px] p-5">
               <p className="font-display text-5xl leading-none text-[color:var(--market-text)]">{item.category} previews</p>
               <p className="mt-5 text-sm leading-6 text-[color:var(--market-muted)]">{item.note}</p>
-              <p className="mt-10 border-t border-[color:var(--market-border)] pt-4 font-mono text-xs text-[color:var(--market-accent)]">waiting for drop {String(index + 1).padStart(2, "0")}</p>
+              <p className="mt-10 border-t border-[color:var(--market-border)] pt-4 font-mono text-xs text-[color:var(--market-accent)]">Private vault active. Public previews coming soon.</p>
             </div>
           ))}
         </div>
@@ -382,7 +436,13 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
         </div>
         <div className="market-lane-showcase">
           {featuredLanes.map((lane, index) => (
-            <LaneFeatureCard key={lane.category} lane={lane} index={index} />
+            <LaneFeatureCard
+              key={lane.category}
+              lane={lane}
+              index={index}
+              creatorCount={categoryStats.get(lane.category)?.creators ?? 0}
+              fileCount={categoryStats.get(lane.category)?.files ?? 0}
+            />
           ))}
         </div>
       </section>
@@ -443,15 +503,23 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
             <p className="mt-6 max-w-lg text-base leading-7 text-[color:var(--market-muted)]">
               Verdact lists metadata for browsing while media stays in creator-owned Shelby blobs. Public pages never require wallet connection until the visitor acts.
             </p>
+            <div className="market-trust-grid mt-6">
+              {trustBadges.map(({ label, icon: Icon }) => (
+                <div key={label} className="market-trust-badge">
+                  <Icon className="h-4 w-4 text-[color:var(--market-accent)]" />
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div data-reveal className="grid gap-5 md:grid-cols-2">
             <div className="market-panel p-5">
               <p className="font-mono text-xs text-[color:var(--market-accent)]">FREE STOREFRONTS</p>
-              <p className="mt-10 text-sm leading-6 text-[color:var(--market-muted)]">Public content remains visible to anyone. Support flows through direct donations.</p>
+              <p className="mt-10 text-sm leading-6 text-[color:var(--market-muted)]">Free storefronts are public content plus direct donations. Visitors can browse without a wallet and support when they choose.</p>
             </div>
             <div className="market-panel p-5">
               <p className="font-mono text-xs text-[color:var(--market-accent)]">PAID VAULTS</p>
-              <p className="mt-10 text-sm leading-6 text-[color:var(--market-muted)]">Preview cards stay public. Full blobs unlock only after subscription verification.</p>
+              <p className="mt-10 text-sm leading-6 text-[color:var(--market-muted)]">Paid vaults are public previews plus subscription-gated Shelby blobs. Full content only loads after access is verified.</p>
             </div>
           </div>
         </div>
@@ -467,19 +535,24 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
         <div className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3">
           {gridCreators.length > 0 ? (
             gridCreators.map((creator, index) => (
-              <div key={creator.id} className={index === 0 ? "xl:col-span-2" : ""}>
-                <MarketplaceCard creator={creator} featured={index === 0} />
+              <div key={creator.id} className={gridCreators.length <= 2 || index === 0 ? "xl:col-span-2" : ""}>
+                <MarketplaceCard creator={creator} featured={gridCreators.length <= 2 || index === 0} />
               </div>
             ))
           ) : (
             <div data-reveal className="market-panel min-h-[260px] p-6 md:col-span-2 xl:col-span-3">
-              <p className="font-display text-6xl leading-none text-[color:var(--market-text)]">More storefronts will land here.</p>
+              <p className="font-display text-6xl leading-none text-[color:var(--market-text)]">No storefronts match this view yet.</p>
               <p className="mt-5 max-w-xl text-sm leading-6 text-[color:var(--market-muted)]">
-                The first storefront is already featured above. New public creators will appear in this grid as they publish previews.
+                Try another category, reset filters, or start the first public creator vault for this lane.
               </p>
-              <Link href="/vault" className="interactive-control mt-8 inline-flex min-h-12 items-center bg-[color:var(--market-action)] px-5 font-mono text-sm text-[color:var(--market-text)]">
+              <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/" className="interactive-control inline-flex min-h-12 items-center border border-[color:var(--market-border)] px-5 font-mono text-sm text-[color:var(--market-text)]">
+                Reset filters
+              </Link>
+              <Link href="/vault" className="interactive-control inline-flex min-h-12 items-center bg-[color:var(--market-action)] px-5 font-mono text-sm text-[color:var(--market-text)]">
                 Create a storefront
               </Link>
+              </div>
             </div>
           )}
         </div>
