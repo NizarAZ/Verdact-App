@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Copy, FileText, Gift, LineChart, Plus, Radio, Settings, Share2, Trash2, Upload, Users } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Copy, FileText, Gift, LineChart, Plus, Radio, Settings, Share2, Trash2, Upload, Users } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
 import { BackLink } from "@/components/ui/BackLink";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { categories } from "@/lib/constants";
+import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
-import { createBlobObjectUrl, readShelbyBlob } from "@/lib/shelby-browser";
+import { createBlobObjectUrl, createClientBlobRegistration, putShelbyBlobWithRetry, readShelbyBlob, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
 
 type VaultPayload = {
   vault: any | null;
@@ -30,7 +31,7 @@ function VaultTopbar({ address }: { address?: string | null }) {
       <nav className="container-shell flex min-h-[64px] items-center justify-between gap-4">
         <Link href="/" className="interactive-control font-display text-3xl leading-none">Verdact</Link>
         <div className="flex items-center gap-4 font-mono text-xs text-text-tertiary">
-          <Link href="/" className="interactive-control hidden hover:text-text-primary sm:inline">Marketplace</Link>
+          <Link href="/" prefetch={false} className="interactive-control hidden hover:text-text-primary sm:inline">Marketplace</Link>
           <Link href="/vault/upload" className="interactive-control hidden hover:text-text-primary sm:inline">Upload</Link>
           <Link href="/vault/analytics" className="interactive-control hidden hover:text-text-primary sm:inline">Analytics</Link>
           {address ? <span className="border border-base px-3 py-2">{truncateMiddle(address, 8, 6)}</span> : <WalletButton compact />}
@@ -141,6 +142,17 @@ function FileKind({ fileType }: { fileType?: string | null }) {
   );
 }
 
+function cleanBlobFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "-") || "banner";
+}
+
+function shortContentBannerBlobName(address: string, fileName: string) {
+  const extension = (fileName.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0] ?? "").toLowerCase();
+  const walletPart = address.replace(/^0x/, "").slice(-8);
+  const randomPart = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
+  return cleanBlobFileName(`t-${walletPart}-${randomPart}${extension}`).slice(0, 48);
+}
+
 function VaultContentViewer({ item, onClose }: { item: any; onClose: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
@@ -185,7 +197,16 @@ function VaultContentViewer({ item, onClose }: { item: any; onClose: () => void 
           </button>
         </div>
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-          {error ? <p className="text-sm text-red-400">{error}</p> : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
+          {error ? (
+            <div className="max-w-md border border-base bg-[color:var(--vault-panel)] p-5 text-center">
+              <AlertTriangle className="mx-auto h-7 w-7 text-brand" />
+              <p className="mt-5 font-display text-3xl leading-none text-text-primary">Shelby blob unavailable.</p>
+              <p className="mt-3 text-sm leading-6 text-text-tertiary">
+                This listing exists in Verdact metadata, but the stored Shelby blob could not be downloaded. Older uploads may have expired or used a retired blob name format.
+              </p>
+              <p className="mt-4 font-mono text-xs text-brand">{error}</p>
+            </div>
+          ) : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
           {url && item.file_type?.startsWith("video/") ? <video src={url} controls className="max-h-full w-full" /> : null}
           {url && item.file_type?.startsWith("audio/") ? <audio src={url} controls className="w-full" /> : null}
           {url && item.file_type?.startsWith("image/") ? <img src={url} alt={item.title} className="max-h-full max-w-full" /> : null}
@@ -211,13 +232,54 @@ function ContentSettingsModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { walletFetch } = useWallet();
+  const { address, signAndSubmitTransaction, walletFetch } = useWallet();
   const [title, setTitle] = useState(item.title || "");
   const [description, setDescription] = useState(item.description || "");
+  const [thumbnailBlobId, setThumbnailBlobId] = useState(item.thumbnail_blob_id || "");
+  const [thumbnailPreview, setThumbnailPreview] = useState("");
   const [allowDownload, setAllowDownload] = useState(item.allow_download !== false);
   const [isPreview, setIsPreview] = useState(Boolean(item.is_preview));
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+
+  async function uploadThumbnail(file?: File | null) {
+    if (!file || !address) return;
+    const previewUrl = URL.createObjectURL(file);
+    setThumbnailPreview(previewUrl);
+    setUploadingThumbnail(true);
+    setStatus("Uploading content banner to Shelby.");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const blobName = shortContentBannerBlobName(address, file.name);
+      const expirationMicros = Date.now() * 1000 + 365 * 24 * 60 * 60 * 1_000_000;
+      const payload = await createClientBlobRegistration({
+        walletAddress: address,
+        blobName,
+        blobData: bytes,
+        expirationMicros
+      });
+      const tx = await signAndSubmitTransaction(payload);
+      await waitForShelbynetTransaction(tx.hash);
+      await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
+      await putShelbyBlobWithRetry({
+        walletAddress: address,
+        blobName,
+        blobData: bytes,
+        file,
+        walletFetch,
+        onStatus: setStatus
+      });
+      setThumbnailBlobId(blobName);
+      setStatus("Content banner uploaded. Save file settings to apply it.");
+    } catch (error) {
+      setThumbnailPreview("");
+      URL.revokeObjectURL(previewUrl);
+      setStatus(error instanceof Error ? error.message : "Failed to upload content banner.");
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  }
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -230,6 +292,7 @@ function ContentSettingsModal({
         body: JSON.stringify({
           title,
           description,
+          thumbnail_blob_id: thumbnailBlobId,
           allow_download: allowDownload,
           is_preview: isPreview
         })
@@ -260,6 +323,32 @@ function ContentSettingsModal({
 
         <div className="mt-6 grid gap-4">
           <label className="block text-sm text-text-secondary">
+            Content banner
+            <div className="mt-2 overflow-hidden border border-base bg-[color:var(--vault-bg)]">
+              <div className="relative flex h-44 items-center justify-center">
+                {thumbnailPreview ? (
+                  <img src={thumbnailPreview} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                ) : thumbnailBlobId ? (
+                  <ShelbyBlobImage
+                    walletAddress={item.wallet_address}
+                    blobId={thumbnailBlobId}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    fallback={<FileText className="h-6 w-6 text-brand" />}
+                  />
+                ) : (
+                  <FileText className="h-6 w-6 text-brand" />
+                )}
+              </div>
+              <div className="border-t border-base p-3">
+                <label className="interactive-control inline-flex min-h-10 w-full cursor-pointer items-center justify-center border border-base px-3 font-mono text-xs">
+                  {uploadingThumbnail ? "Uploading banner" : thumbnailBlobId ? "Replace banner from files" : "Upload banner from files"}
+                  <input type="file" accept="image/*" disabled={uploadingThumbnail} onChange={(event) => uploadThumbnail(event.target.files?.[0])} className="sr-only" />
+                </label>
+              </div>
+            </div>
+          </label>
+          <label className="block text-sm text-text-secondary">
             Title
             <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full border border-base bg-transparent px-3 py-3 text-text-primary outline-none focus:border-brand" required />
           </label>
@@ -277,8 +366,8 @@ function ContentSettingsModal({
           </label>
         </div>
 
-        <button type="submit" disabled={busy} className="interactive-control mt-5 min-h-12 w-full bg-brand px-4 font-mono text-sm text-brand-dark disabled:opacity-50">
-          {busy ? "Saving" : "Save file settings"}
+        <button type="submit" disabled={busy || uploadingThumbnail} className="interactive-control mt-5 min-h-12 w-full bg-brand px-4 font-mono text-sm text-brand-dark disabled:opacity-50">
+          {uploadingThumbnail ? "Waiting for banner upload" : busy ? "Saving" : "Save file settings"}
         </button>
         {status ? <p className="mt-4 text-sm text-red-400">{status}</p> : null}
       </form>
@@ -293,6 +382,7 @@ export function VaultClient() {
   const [copied, setCopied] = useState("");
   const [viewerItem, setViewerItem] = useState<any | null>(null);
   const [settingsItem, setSettingsItem] = useState<any | null>(null);
+  const [contentStatus, setContentStatus] = useState("");
 
   async function load() {
     setLoading(true);
@@ -310,7 +400,14 @@ export function VaultClient() {
   }, [isConnected]);
 
   async function removeContent(id: string) {
-    await walletFetch(`/api/content/${id}`, { method: "DELETE" });
+    setContentStatus("");
+    const response = await walletFetch(`/api/content/${id}`, { method: "DELETE" });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setContentStatus(json.error || "Failed to delete content listing.");
+      return;
+    }
+    setContentStatus("Content listing removed.");
     await load();
   }
 
@@ -457,6 +554,7 @@ export function VaultClient() {
                 New upload
               </Link>
             </div>
+            {contentStatus ? <p className="mb-4 border border-base p-3 font-mono text-xs text-text-secondary">{contentStatus}</p> : null}
             <div className="grid gap-3">
               {latestContent.length === 0 ? (
                 <EmptyState title="Publish the first object in your vault." body="Upload a preview, essay, audio file, deck, dataset, or video. It will appear here as a creator-owned Shelby file with view activity." action="Upload content" href="/vault/upload" icon={Upload} />

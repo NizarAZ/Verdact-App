@@ -13,6 +13,7 @@ export function BackLink({ href = "/", label = "Back", className = "" }: BackLin
   return (
     <Link
       href={href}
+      prefetch={false}
       className={`interactive-control inline-flex min-h-10 items-center gap-2 border border-base px-3 font-mono text-xs text-text-tertiary hover:text-text-primary ${className}`}
     >
       <ArrowLeft className="h-4 w-4" />

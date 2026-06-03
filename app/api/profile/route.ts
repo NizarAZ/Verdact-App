@@ -57,16 +57,26 @@ export async function GET(request: Request) {
     ]
       .filter(Boolean)
       .sort()[0] ?? null;
+    const activeByCreator = new Map<string, (typeof subscriptions.data)[number]>();
+    const expiredByCreator = new Map<string, (typeof subscriptions.data)[number]>();
+
+    for (const item of subscriptions.data ?? []) {
+      const target = item.expires_at > now ? activeByCreator : expiredByCreator;
+      const existing = target.get(item.creator_wallet);
+      if (!existing || item.expires_at > existing.expires_at) {
+        target.set(item.creator_wallet, item);
+      }
+    }
 
     return NextResponse.json({
       wallet: walletAddress,
       vault: vault.data ?? null,
       memberSince: earliest,
-      activeSubscriptions: (subscriptions.data ?? []).filter((item) => item.expires_at > now).map((item) => ({
+      activeSubscriptions: [...activeByCreator.values()].map((item) => ({
         ...item,
         creator: creatorMap.get(item.creator_wallet) ?? null
       })),
-      expiredSubscriptions: (subscriptions.data ?? []).filter((item) => item.expires_at <= now).map((item) => ({
+      expiredSubscriptions: [...expiredByCreator.values()].map((item) => ({
         ...item,
         creator: creatorMap.get(item.creator_wallet) ?? null
       })),

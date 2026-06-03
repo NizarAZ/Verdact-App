@@ -178,12 +178,26 @@ export async function readShelbyBlob(params: {
   blobName: string;
 }) {
   const client = getShelbyBrowserClient();
-  const blob = await client.download({
-    account: AccountAddress.from(params.walletAddress),
-    blobName: params.blobName
-  });
-  const response = new Response(blob.readable);
-  return new Uint8Array(await response.arrayBuffer());
+  const account = AccountAddress.from(params.walletAddress);
+  const candidates = Array.from(
+    new Set([
+      params.blobName,
+      params.blobName.split("/").filter(Boolean).at(-1) ?? params.blobName
+    ])
+  );
+  let lastError: unknown;
+
+  for (const blobName of candidates) {
+    try {
+      const blob = await client.download({ account, blobName });
+      const response = new Response(blob.readable);
+      return new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to download blob.");
 }
 
 export function createShelbyUsdTransferPayload(params: {

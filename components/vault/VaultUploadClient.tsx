@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Check, FileArchive, FileUp, Lock, Radio, UploadCloud } from "lucide-react";
+import { Check, FileArchive, Image as ImageIcon, Lock, PenLine, Radio, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
@@ -44,7 +44,10 @@ function compactFileName(name: string, max = 58) {
 export function VaultUploadClient() {
   const router = useRouter();
   const { address, isConnected, signAndSubmitTransaction, walletFetch } = useWallet();
+  const [mode, setMode] = useState<"file" | "post">("file");
   const [file, setFile] = useState<File | null>(null);
+  const [postBody, setPostBody] = useState("");
+  const [postCover, setPostCover] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [allowDownload, setAllowDownload] = useState(true);
@@ -53,45 +56,70 @@ export function VaultUploadClient() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const derivedTitle = useMemo(() => title || file?.name.replace(/\.[^.]+$/, "") || "Untitled upload", [file, title]);
+  const derivedTitle = useMemo(() => title || file?.name.replace(/\.[^.]+$/, "") || (mode === "post" ? "Untitled post" : "Untitled upload"), [file, mode, title]);
+
+  async function registerAndUploadBlob(blobFile: File, blobData: Uint8Array, statusLabel: string) {
+    if (!address) throw new Error("Connect Petra before publishing.");
+    const blobName = shortBlobName(address, blobFile.name);
+    const expirationMicros = Date.now() * 1000 + 365 * 24 * 60 * 60 * 1_000_000;
+    setStep("registering");
+    setStatus(`Preparing ${statusLabel}.`);
+    const payload = await createClientBlobRegistration({
+      walletAddress: address,
+      blobName,
+      blobData,
+      expirationMicros
+    });
+
+    setStep("signing");
+    const tx = await signAndSubmitTransaction(payload);
+    await waitForShelbynetTransaction(tx.hash);
+    setStatus(`Waiting for ${statusLabel} registration to become available.`);
+    await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
+
+    setStep("uploading");
+    await putShelbyBlobWithRetry({
+      walletAddress: address,
+      blobName,
+      blobData,
+      file: blobFile,
+      walletFetch,
+      onStatus: setStatus
+    });
+
+    return { blobName, txHash: tx.hash };
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!file || !address) return;
+    if (!address) return;
     setBusy(true);
     setStatus("");
 
     try {
-      if (file.size > maxUploadBytes) throw new Error("Files are limited to 100MB.");
-      const typeAllowed = acceptedUploadTypes.includes(file.type) || file.name.endsWith(".md");
+      let uploadFile = file;
+      if (mode === "post") {
+        if (!title.trim()) throw new Error("Add a title before publishing a post.");
+        if (!postBody.trim()) throw new Error("Write the post before publishing.");
+        const postFileName = `${sanitizeFileName(title.trim()) || "post"}.md`;
+        uploadFile = new File([postBody], postFileName, { type: "text/markdown" });
+      }
+
+      if (!uploadFile) return;
+      if (uploadFile.size > maxUploadBytes) throw new Error("Files are limited to 100MB.");
+      const typeAllowed = acceptedUploadTypes.includes(uploadFile.type) || uploadFile.name.endsWith(".md");
       if (!typeAllowed) throw new Error("Unsupported file type.");
 
-      const bytes = await fileBytes(file);
-      const blobName = shortBlobName(address, file.name);
-      const expirationMicros = Date.now() * 1000 + 365 * 24 * 60 * 60 * 1_000_000;
-      setStep("registering");
-      const payload = await createClientBlobRegistration({
-        walletAddress: address,
-        blobName,
-        blobData: bytes,
-        expirationMicros
-      });
+      let thumbnailBlobId = "";
+      if (mode === "post" && postCover) {
+        if (postCover.size > maxUploadBytes) throw new Error("Post cover is limited to 100MB.");
+        if (!postCover.type.startsWith("image/")) throw new Error("Post cover must be an image.");
+        const coverResult = await registerAndUploadBlob(postCover, await fileBytes(postCover), "post cover");
+        thumbnailBlobId = coverResult.blobName;
+      }
 
-      setStep("signing");
-      const tx = await signAndSubmitTransaction(payload);
-      await waitForShelbynetTransaction(tx.hash);
-      setStatus("Waiting for Shelby registration to become available.");
-      await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
-
-      setStep("uploading");
-      await putShelbyBlobWithRetry({
-        walletAddress: address,
-        blobName,
-        blobData: bytes,
-        file,
-        walletFetch,
-        onStatus: setStatus
-      });
+      const bytes = await fileBytes(uploadFile);
+      const { blobName, txHash } = await registerAndUploadBlob(uploadFile, bytes, mode === "post" ? "post body" : "file");
 
       setStep("confirmed");
       setStatus("Saving storefront metadata.");
@@ -101,11 +129,12 @@ export function VaultUploadClient() {
         body: JSON.stringify({
           title: derivedTitle,
           description,
-          file_type: file.type || (file.name.endsWith(".md") ? "text/markdown" : "application/octet-stream"),
-          file_name: file.name,
+          file_type: uploadFile.type || (uploadFile.name.endsWith(".md") ? "text/markdown" : "application/octet-stream"),
+          file_name: uploadFile.name,
           blob_id: blobName,
-          onchain_tx_hash: tx.hash,
-          size_bytes: file.size,
+          onchain_tx_hash: txHash,
+          size_bytes: uploadFile.size,
+          thumbnail_blob_id: thumbnailBlobId || null,
           allow_download: allowDownload,
           is_preview: isPreview
         })
@@ -155,17 +184,51 @@ export function VaultUploadClient() {
             <h1 className="mt-5 max-w-2xl font-display text-7xl leading-none text-text-primary">Upload the next object in your vault.</h1>
             <p className="mt-5 max-w-lg text-sm leading-6 text-text-tertiary">The file is registered onchain, stored as a Shelby blob, then listed in your public storefront metadata.</p>
 
-            <label className="interactive-control vault-upload-drop mt-8 flex cursor-pointer flex-col justify-between p-6">
-              <UploadCloud className="h-9 w-9 text-brand" />
-              <div>
-                <p className="max-w-full overflow-hidden break-words font-display text-3xl leading-none text-text-primary md:text-4xl" title={file?.name}>
-                  {file ? compactFileName(file.name) : "Choose a file"}
-                </p>
-                <p className="mt-2 font-mono text-xs text-text-tertiary">{fileSize(file?.size)}</p>
-                <p className="mt-4 max-w-lg text-xs leading-5 text-text-tertiary">MP4, MOV, MP3, WAV, JPG, PNG, GIF, PDF, TXT, MD, DOCX, PPTX, CSV, JSON / 100MB max</p>
+            <div className="mt-8 grid grid-cols-2 border border-base font-mono text-xs">
+              <button type="button" onClick={() => setMode("file")} className={`interactive-control min-h-11 border-r border-base ${mode === "file" ? "bg-brand text-brand-dark" : "text-text-tertiary"}`}>
+                Upload file
+              </button>
+              <button type="button" onClick={() => setMode("post")} className={`interactive-control min-h-11 ${mode === "post" ? "bg-brand text-brand-dark" : "text-text-tertiary"}`}>
+                Write post
+              </button>
+            </div>
+
+            {mode === "file" ? (
+              <label className="interactive-control vault-upload-drop mt-4 flex cursor-pointer flex-col justify-between p-6">
+                <UploadCloud className="h-9 w-9 text-brand" />
+                <div>
+                  <p className="max-w-full overflow-hidden break-words font-display text-3xl leading-none text-text-primary md:text-4xl" title={file?.name}>
+                    {file ? compactFileName(file.name) : "Choose a file"}
+                  </p>
+                  <p className="mt-2 font-mono text-xs text-text-tertiary">{fileSize(file?.size)}</p>
+                  <p className="mt-4 max-w-lg text-xs leading-5 text-text-tertiary">MP4, MOV, MP3, WAV, JPG, PNG, GIF, PDF, TXT, MD, DOCX, PPTX, CSV, JSON / 100MB max</p>
+                </div>
+                <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+              </label>
+            ) : (
+              <div className="vault-upload-drop mt-4 flex flex-col justify-between p-6">
+                <PenLine className="h-9 w-9 text-brand" />
+                <div className="mt-10 grid gap-4">
+                  <label className="block text-sm text-text-secondary">
+                    Post body
+                    <textarea
+                      value={postBody}
+                      onChange={(event) => setPostBody(event.target.value)}
+                      placeholder="Write the post that will be stored as a Shelby markdown blob."
+                      className="mt-2 min-h-56 w-full border border-base bg-transparent px-3 py-3 text-text-primary outline-none focus:border-brand"
+                    />
+                  </label>
+                  <label className="interactive-control flex min-h-12 cursor-pointer items-center justify-between gap-3 border border-base px-3 font-mono text-xs text-text-tertiary">
+                    <span className="inline-flex min-w-0 items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-brand" />
+                      <span className="truncate">{postCover ? compactFileName(postCover.name, 44) : "Add optional post picture"}</span>
+                    </span>
+                    <span>{fileSize(postCover?.size)}</span>
+                    <input type="file" accept="image/*" className="sr-only" onChange={(event) => setPostCover(event.target.files?.[0] ?? null)} />
+                  </label>
+                </div>
               </div>
-              <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-            </label>
+            )}
           </section>
 
           <section className="grid gap-6">
@@ -210,7 +273,7 @@ export function VaultUploadClient() {
                   );
                 })}
               </div>
-              <button type="submit" disabled={busy || !file} className="interactive-control mt-5 min-h-12 w-full bg-brand px-4 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={busy || (mode === "file" ? !file : !postBody.trim())} className="interactive-control mt-5 min-h-12 w-full bg-brand px-4 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
                 {busy ? "Publishing" : "Publish to vault"}
               </button>
               {status ? <p className="mt-4 text-sm text-red-300">{status}</p> : null}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Heart, Image as ImageIcon, Lock, Music, Play, X } from "lucide-react";
+import { ArrowUpRight, Download, FileText, Heart, Image as ImageIcon, Lock, Music, Play, X } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { PublicNav } from "@/components/marketplace/PublicNav";
@@ -33,7 +33,7 @@ function contentIcon(fileType?: string | null) {
 }
 
 function canViewContent(state: CreatorState, item: ContentRecord) {
-  return state.hasAccess;
+  return state.hasAccess || item.is_preview;
 }
 
 function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void }) {
@@ -183,6 +183,7 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
   const [donating, setDonating] = useState(false);
   const [notice, setNotice] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(4);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -243,6 +244,7 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
   }
 
   const publicContent = useMemo(() => state.content, [state.content]);
+  const visibleContent = useMemo(() => publicContent.slice(0, visibleCount), [publicContent, visibleCount]);
   const previewCount = useMemo(() => state.content.filter((item) => item.is_preview).length, [state.content]);
   const lockedCount = useMemo(() => state.content.filter((item) => !canViewContent(state, item)).length, [state]);
 
@@ -262,20 +264,18 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
                 blobId={state.vault.cover_blob_id}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
+                fallback={<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:34px_34px]" />}
               />
             ) : (
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:34px_34px]" />
             )}
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-[color:var(--market-bg)]" />
-            <div className="pointer-events-none absolute right-8 top-8 h-32 w-24 rotate-3 border border-[color:var(--market-line)] bg-[color:var(--market-paper)]">
+            {!state.vault.cover_blob_id ? <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-[color:var(--market-bg)]" /> : null}
+            {!state.vault.cover_blob_id ? <div className="pointer-events-none absolute right-8 top-8 h-32 w-24 rotate-3 border border-[color:var(--market-line)] bg-[color:var(--market-paper)]">
               <div className="m-3 h-2 bg-[color:var(--market-accent)]" />
               <div className="mx-3 mt-3 h-1 bg-[color:var(--market-ink)] opacity-30" />
               <div className="mx-3 mt-2 h-1 bg-[color:var(--market-ink)] opacity-25" />
               <div className="mx-3 mt-3 h-10 border border-[color:var(--market-accent)]" />
-            </div>
-            <div className="absolute bottom-5 left-5 border border-[color:var(--market-border)] bg-[color:var(--market-bg)] px-3 py-2 font-mono text-xs text-text-tertiary">
-              {state.vault.is_paid ? "Paid storefront" : "Free public storefront"}
-            </div>
+            </div> : null}
           </div>
           <div className="p-6">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
@@ -347,6 +347,22 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
           </div>
         </header>
 
+        <section className="market-panel mt-6 p-5">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <p className="font-mono text-xs text-[color:var(--market-accent)]">FAVOURITE CREATORS</p>
+              <h2 className="mt-3 font-display text-4xl leading-none">Save storefronts with the heart icon.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-text-tertiary">
+                Favourite this creator to keep the storefront in your profile and return to it from your personal marketplace list.
+              </p>
+            </div>
+            <button type="button" onClick={toggleFavourite} className="interactive-control inline-flex min-h-11 items-center gap-3 border border-base px-4 font-mono text-sm">
+              <Heart className={`h-4 w-4 ${state.isFavourite ? "fill-[color:var(--color-pink)] text-[color:var(--color-pink)]" : "text-text-tertiary"}`} />
+              {state.isFavourite ? "Saved to favourites" : "Add favourite"}
+            </button>
+          </div>
+        </section>
+
         <div className="mt-10 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="font-display text-5xl leading-none">Content feed</h2>
@@ -361,41 +377,56 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
           ) : null}
         </div>
 
-        <section className="mt-6 grid auto-rows-fr gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {publicContent.map((item, index) => {
+        <section className="mt-6 grid gap-5">
+          {visibleContent.map((item) => {
             const Icon = contentIcon(item.file_type);
             const viewable = canViewContent(state, item);
             return (
-              <article key={item.id} className={`market-card p-4 ${index === 0 ? "lg:col-span-2" : ""}`}>
-                <div className="relative flex aspect-video items-center justify-center border border-[color:var(--market-border)] bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:28px_28px]">
-                  {viewable ? <Icon className="h-8 w-8 text-[color:var(--color-pink)]" /> : <Lock className="h-8 w-8 text-text-tertiary" />}
-                  {!viewable ? <div className="pointer-events-none absolute bottom-3 right-3 border border-base bg-[color:var(--color-bg)] px-2 py-1 font-mono text-[10px] text-text-tertiary">subscription required</div> : null}
-                </div>
-                <div className="mt-4 flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-3xl leading-none">{item.title}</h2>
-                    <p className="mt-2 line-clamp-2 text-sm text-text-tertiary">{item.description || "No description."}</p>
-                  </div>
-                  {item.is_preview ? <span className="rounded-sm border border-base px-2 py-1 font-mono text-[10px] text-text-secondary">PREVIEW</span> : null}
-                </div>
-                <div className="mt-5 flex items-center justify-between gap-3 font-mono text-xs text-text-tertiary">
-                  <span>{item.file_type || "file"}</span>
-                  <span>{formatDate(item.created_at)}</span>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button type="button" disabled={!viewable} onClick={() => setViewerItem(item)} className="interactive-control min-h-10 flex-1 border border-base px-3 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-40">
-                    {viewable ? "Open" : "Locked"}
-                  </button>
-                  {viewable && item.allow_download ? (
-                    <button type="button" onClick={() => downloadContent(item)} disabled={downloadingId === item.id} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base disabled:cursor-wait disabled:opacity-60" aria-label="Download">
-                      <Download className="h-4 w-4" />
-                    </button>
+              <article key={item.id} className="market-card grid overflow-hidden md:grid-cols-[0.55fr_1fr]">
+                <div className="relative min-h-64 border-b border-[color:var(--market-border)] bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:28px_28px] md:border-b-0 md:border-r">
+                  {item.thumbnail_blob_id ? (
+                    <ShelbyBlobImage
+                      walletAddress={item.wallet_address}
+                      blobId={item.thumbnail_blob_id}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
                   ) : null}
+                  {!item.thumbnail_blob_id ? <div className="absolute inset-0 flex items-center justify-center">
+                    {viewable ? <Icon className="h-8 w-8 text-[color:var(--color-pink)]" /> : <Lock className="h-8 w-8 text-text-tertiary" />}
+                  </div> : null}
+                  {!viewable ? <div className="pointer-events-none absolute bottom-4 right-4 border border-base bg-[color:var(--color-bg)] px-3 py-2 font-mono text-[10px] text-text-tertiary">subscription required</div> : null}
+                </div>
+                <div className="flex min-h-64 flex-col p-5">
+                  <div className="flex flex-wrap gap-2 font-mono text-[10px] text-text-tertiary">
+                    <span className="border border-base px-2 py-1">{item.file_type || "file"}</span>
+                    <span className="border border-base px-2 py-1">{formatDate(item.created_at)}</span>
+                    <span className="border border-base px-2 py-1 text-brand">{item.is_preview ? "PREVIEW" : viewable ? "UNLOCKED" : "LOCKED"}</span>
+                  </div>
+                  <h2 className="mt-8 font-display text-5xl leading-none">{item.title}</h2>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-text-tertiary">{item.description || "No description added yet."}</p>
+                  <div className="mt-auto flex flex-wrap gap-2 pt-8">
+                    <button type="button" disabled={!viewable} onClick={() => setViewerItem(item)} className="interactive-control inline-flex min-h-10 flex-1 items-center justify-center gap-2 border border-base px-3 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-40">
+                      {viewable ? "Open" : "Locked"} {viewable ? <ArrowUpRight className="h-3.5 w-3.5" /> : null}
+                    </button>
+                    {viewable && item.allow_download ? (
+                      <button type="button" onClick={() => downloadContent(item)} disabled={downloadingId === item.id} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base disabled:cursor-wait disabled:opacity-60" aria-label="Download">
+                        <Download className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             );
           })}
         </section>
+        {visibleCount < publicContent.length ? (
+          <div className="mt-6 flex justify-center">
+            <button type="button" onClick={() => setVisibleCount((count) => count + 4)} className="interactive-control inline-flex min-h-11 items-center border border-base px-5 font-mono text-sm">
+              Load more content
+            </button>
+          </div>
+        ) : null}
         {publicContent.length === 0 ? (
           <div className="market-panel mt-6 overflow-hidden p-8">
             <div className="grid gap-8 md:grid-cols-[0.9fr_1.1fr] md:items-center">

@@ -22,6 +22,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .update({
         title,
         description: text(body.description, 1000) || null,
+        thumbnail_blob_id: text(body.thumbnail_blob_id, 300) || null,
         allow_download: body.allow_download !== false,
         is_preview: Boolean(body.is_preview)
       })
@@ -44,6 +45,20 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
   try {
     const walletAddress = getWalletAddress(request);
     const supabase = getSupabaseAdmin();
+
+    const { data: content, error: findError } = await supabase
+      .from("content")
+      .select("id")
+      .eq("id", params.id)
+      .eq("wallet_address", walletAddress)
+      .maybeSingle();
+
+    if (findError) throw findError;
+    if (!content) return NextResponse.json({ error: "Content not found." }, { status: 404 });
+
+    const { error: viewsError } = await supabase.from("content_views").delete().eq("content_id", params.id);
+    if (viewsError) throw viewsError;
+
     const { error } = await supabase
       .from("content")
       .delete()
