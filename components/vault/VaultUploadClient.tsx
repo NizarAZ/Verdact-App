@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { BackLink } from "@/components/ui/BackLink";
-import { acceptedUploadTypes, maxUploadBytes } from "@/lib/constants";
+import { acceptedUploadInput, acceptedUploadTypes, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { createClientBlobRegistration, putShelbyBlobWithRetry, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
 
@@ -201,9 +201,9 @@ export function VaultUploadClient() {
                     {file ? compactFileName(file.name) : "Choose a file"}
                   </p>
                   <p className="mt-2 font-mono text-xs text-text-tertiary">{fileSize(file?.size)}</p>
-                  <p className="mt-4 max-w-lg text-xs leading-5 text-text-tertiary">MP4, MOV, MP3, WAV, JPG, PNG, GIF, PDF, TXT, MD, DOCX, PPTX, CSV, JSON / 100MB max</p>
+                  <p className="mt-4 max-w-lg text-xs leading-5 text-text-tertiary">MP4, MOV, JPG, PNG, GIF, PDF, TXT, MD, DOCX, PPTX, CSV, JSON / 100MB max</p>
                 </div>
-                <input type="file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+                <input type="file" accept={acceptedUploadInput} className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
               </label>
             ) : (
               <div className="vault-upload-drop mt-4 flex flex-col justify-between p-6">

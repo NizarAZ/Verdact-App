@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Download, FileText, Heart, Image as ImageIcon, Lock, Music, Play, X } from "lucide-react";
+import { ArrowUpRight, Download, FileText, Heart, Image as ImageIcon, Lock, Play, X } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { PublicNav } from "@/components/marketplace/PublicNav";
@@ -27,7 +27,6 @@ const donationPresets = [0.1, 0.5, 1, 5];
 
 function contentIcon(fileType?: string | null) {
   if (fileType?.startsWith("video/")) return Play;
-  if (fileType?.startsWith("audio/")) return Music;
   if (fileType?.startsWith("image/")) return ImageIcon;
   return FileText;
 }
@@ -83,11 +82,10 @@ function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void })
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
           {error ? <p className="text-sm text-red-300">{error}</p> : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
           {url && item.file_type?.startsWith("video/") ? <video src={url} controls className="max-h-full w-full" /> : null}
-          {url && item.file_type?.startsWith("audio/") ? <audio src={url} controls className="w-full" /> : null}
           {url && item.file_type?.startsWith("image/") ? <img src={url} alt={item.title} className="max-h-full max-w-full" /> : null}
           {url && item.file_type === "application/pdf" ? <iframe src={url} title={item.title} className="h-full min-h-[70vh] w-full" /> : null}
           {url && text ? <pre className="w-full whitespace-pre-wrap font-mono text-sm leading-6 text-text-primary">{text}</pre> : null}
-          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("audio/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
+          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
             <a href={url} download={item.file_name || item.title} className="interactive-control rounded-sm bg-brand px-4 py-3 font-mono text-sm text-brand-dark">
               Open file
             </a>

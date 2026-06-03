@@ -2,7 +2,6 @@ export const categories = [
   "Fitness",
   "Lifestyle",
   "Research",
-  "Music",
   "Art",
   "Education",
   "Finance",
@@ -12,8 +11,6 @@ export const categories = [
 export const acceptedUploadTypes = [
   "video/mp4",
   "video/quicktime",
-  "audio/mpeg",
-  "audio/wav",
   "image/jpeg",
   "image/png",
   "image/gif",
@@ -25,5 +22,22 @@ export const acceptedUploadTypes = [
   "text/csv",
   "application/json"
 ];
+
+export const acceptedUploadInput = [
+  ...acceptedUploadTypes,
+  ".mp4",
+  ".mov",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".pdf",
+  ".txt",
+  ".md",
+  ".docx",
+  ".pptx",
+  ".csv",
+  ".json"
+].join(",");
 
 export const maxUploadBytes = 100 * 1024 * 1024;

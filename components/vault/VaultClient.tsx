@@ -8,7 +8,7 @@ import { WalletButton } from "@/components/wallet/WalletButton";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
 import { BackLink } from "@/components/ui/BackLink";
 import { StyledSelect } from "@/components/ui/StyledSelect";
-import { acceptedUploadTypes, categories, maxUploadBytes } from "@/lib/constants";
+import { acceptedUploadInput, acceptedUploadTypes, categories, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
 import { createBlobObjectUrl, createClientBlobRegistration, putShelbyBlobWithRetry, readShelbyBlob, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
@@ -241,11 +241,10 @@ function VaultContentViewer({ item, onClose }: { item: any; onClose: () => void 
             </div>
           ) : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
           {url && item.file_type?.startsWith("video/") ? <video src={url} controls className="max-h-full w-full" /> : null}
-          {url && item.file_type?.startsWith("audio/") ? <audio src={url} controls className="w-full" /> : null}
           {url && item.file_type?.startsWith("image/") ? <img src={url} alt={item.title} className="max-h-full max-w-full" /> : null}
           {url && item.file_type === "application/pdf" ? <iframe src={url} title={item.title} className="h-full min-h-[70vh] w-full" /> : null}
           {url && text ? <pre className="w-full whitespace-pre-wrap font-mono text-sm leading-6 text-text-primary">{text}</pre> : null}
-          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("audio/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
+          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
             <a href={url} download={item.file_name || item.title} className="interactive-control bg-brand px-4 py-3 font-mono text-sm text-brand-dark">
               Download file
             </a>
@@ -492,7 +491,7 @@ function ContentSettingsModal({
               </div>
               <label className="interactive-control inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center border border-base px-3 font-mono text-xs">
                 Replace local file
-                <input type="file" onChange={(event) => setReplacementFile(event.target.files?.[0] ?? null)} className="sr-only" />
+                <input type="file" accept={acceptedUploadInput} onChange={(event) => setReplacementFile(event.target.files?.[0] ?? null)} className="sr-only" />
               </label>
             </div>
             {textEditable ? (
@@ -724,9 +723,9 @@ export function VaultClient() {
             {contentStatus ? <p className="mb-4 border border-base p-3 font-mono text-xs text-text-secondary">{contentStatus}</p> : null}
             <div className="grid gap-4">
               {latestContent.length === 0 ? (
-                <EmptyState title="Publish the first object in your vault." body="Upload a preview, essay, audio file, deck, dataset, or video. It will appear here as a creator-owned Shelby file with view activity." action="Upload content" href="/vault/upload" icon={Upload} />
+                <EmptyState title="Publish the first object in your vault." body="Upload a preview, essay, deck, dataset, image, PDF, text file, or video. It will appear here as a creator-owned Shelby file with view activity." action="Upload content" href="/vault/upload" icon={Upload} />
               ) : latestContent.map((item) => (
-                <article key={item.id} className="market-card grid overflow-hidden md:grid-cols-[0.48fr_1fr]">
+                <article key={item.id} className="market-card grid min-w-0 overflow-hidden md:grid-cols-[0.48fr_1fr]">
                   <div className="relative min-h-56 border-b border-[color:var(--market-border)] bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:28px_28px] md:border-b-0 md:border-r">
                     {item.thumbnail_blob_id ? (
                       <ShelbyBlobImage
@@ -741,7 +740,7 @@ export function VaultClient() {
                       </div>
                     )}
                   </div>
-                  <div className="flex min-h-56 flex-col p-5">
+                  <div className="flex min-h-56 min-w-0 flex-col p-5">
                     <div className="flex flex-wrap gap-2 font-mono text-[10px] text-text-tertiary">
                       <span className="border border-base px-2 py-1">{item.file_type || "file"}</span>
                       <span className="border border-base px-2 py-1">{formatDate(item.created_at)}</span>
@@ -752,7 +751,7 @@ export function VaultClient() {
                       <span className="block truncate font-display text-5xl leading-none text-text-primary" title={item.title}>{item.title}</span>
                     </button>
                     <p className="mt-4 line-clamp-2 text-sm leading-6 text-text-tertiary">{item.description || "No description added yet."}</p>
-                    <p className="mt-3 truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.file_type || "file"}>
+                    <p className="mt-3 max-w-full overflow-hidden truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.file_type || "file"}>
                       {item.view_count ?? 0} views / {item.file_name || item.file_type || "file"}
                     </p>
                     <div className="mt-auto flex flex-wrap gap-2 pt-8">

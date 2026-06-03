@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { ArrowUpRight, BadgeDollarSign, Eye, FileText, Image as ImageIcon, LockKeyhole, Music, Play, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import { ArrowUpRight, BadgeDollarSign, Eye, FileText, Image as ImageIcon, LockKeyhole, Play, Search, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PublicNav } from "@/components/marketplace/PublicNav";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
@@ -21,10 +21,9 @@ type MarketplaceExperienceProps = {
   };
 };
 
-const contentFormats = ["Video drops", "Audio rooms", "Research logs", "Image sets", "PDF vaults", "Music packs", "Data drops", "Creator notes"];
+const contentFormats = ["Video drops", "Education notes", "Research logs", "Image sets", "PDF vaults", "Course packs", "Data drops", "Creator notes"];
 
 const runway = [
-  { category: "Music", note: "release stems, sessions, liner notes" },
   { category: "Research", note: "papers, datasets, field notebooks" },
   { category: "Art", note: "process files, editions, source packs" },
   { category: "Education", note: "classes, decks, working documents" },
@@ -40,10 +39,10 @@ const featuredLanes = [
     cover: "/images/lane-art.svg"
   },
   {
-    category: "Music",
-    title: "Music lane",
-    note: "release stems, sessions, liner notes",
-    cover: "/images/lane-music.svg"
+    category: "Education",
+    title: "Education lane",
+    note: "classes, decks, working documents",
+    cover: "/images/lane-education.svg"
   },
   {
     category: "Finance",
@@ -63,9 +62,7 @@ const trustBadges: Array<{ label: string; icon: LucideIcon }> = [
 function PreviewIcon({ type }: { type?: string | null }) {
   const Icon = type?.startsWith("video/")
     ? Play
-    : type?.startsWith("audio/")
-      ? Music
-      : type?.startsWith("image/")
+    : type?.startsWith("image/")
         ? ImageIcon
         : FileText;
   return <Icon className="h-4 w-4 text-[color:var(--market-accent)]" />;
