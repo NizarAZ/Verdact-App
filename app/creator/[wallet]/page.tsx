@@ -1,11 +1,16 @@
 import { notFound } from "next/navigation";
+import { unstable_noStore as noStore } from "next/cache";
 import { CreatorProfileClient } from "@/components/creator/CreatorProfileClient";
 import { getContentForVault, getSupporterCount, getVaultByWallet } from "@/lib/supabase-server";
 import { normalizeWalletAddress } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export default async function CreatorPage({ params }: { params: { wallet: string } }) {
+  noStore();
+
   const wallet = normalizeWalletAddress(params.wallet);
   if (!wallet) notFound();
 

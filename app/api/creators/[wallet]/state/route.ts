@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
+import { unstable_noStore as noStore } from "next/cache";
 import { getActiveSubscription, getContentForVault, getSupporterCount, getVaultByWallet, hasFavourite } from "@/lib/supabase-server";
 import { normalizeWalletAddress, sameWallet } from "@/lib/wallet";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET(request: Request, { params }: { params: { wallet: string } }) {
   try {
+    noStore();
+
     const creatorWallet = normalizeWalletAddress(params.wallet);
     if (!creatorWallet) return NextResponse.json({ error: "Invalid creator wallet." }, { status: 400 });
 
@@ -32,6 +37,10 @@ export async function GET(request: Request, { params }: { params: { wallet: stri
       isFavourite: favourite,
       supporterCount,
       subscription
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate"
+      }
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load creator." }, { status: 500 });

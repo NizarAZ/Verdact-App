@@ -186,14 +186,35 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
   const [visibleCount, setVisibleCount] = useState(4);
 
   useEffect(() => {
-    if (!isConnected) return;
-    walletFetch(`/api/creators/${encodeURIComponent(initialState.vault.wallet_address)}/state`, { cache: "no-store" })
-      .then((response) => response.json())
-      .then((json) => {
-        if (json.vault) setState(json);
-      })
-      .catch(() => undefined);
-  }, [initialState.vault.wallet_address, isConnected, walletFetch]);
+    let active = true;
+    const stateUrl = `/api/creators/${encodeURIComponent(initialState.vault.wallet_address)}/state`;
+
+    async function refreshCreatorState() {
+      try {
+        const response = await walletFetch(stateUrl, { cache: "no-store" });
+        const json = await response.json();
+        if (active && json.vault) setState(json);
+      } catch {
+        // Keep the rendered storefront usable if a background refresh fails.
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") void refreshCreatorState();
+    }
+
+    void refreshCreatorState();
+    window.addEventListener("focus", refreshCreatorState);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    const interval = window.setInterval(refreshCreatorState, 12000);
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshCreatorState);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(interval);
+    };
+  }, [initialState.vault.wallet_address, walletFetch]);
 
   async function toggleFavourite() {
     if (!isConnected) {
