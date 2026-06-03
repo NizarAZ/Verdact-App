@@ -8,7 +8,7 @@ import { WalletButton } from "@/components/wallet/WalletButton";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
 import { BackLink } from "@/components/ui/BackLink";
 import { StyledSelect } from "@/components/ui/StyledSelect";
-import { categories } from "@/lib/constants";
+import { acceptedUploadTypes, categories, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
 import { createBlobObjectUrl, createClientBlobRegistration, putShelbyBlobWithRetry, readShelbyBlob, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
@@ -153,6 +153,39 @@ function shortContentBannerBlobName(address: string, fileName: string) {
   return cleanBlobFileName(`t-${walletPart}-${randomPart}${extension}`).slice(0, 48);
 }
 
+function shortContentBlobName(address: string, fileName: string) {
+  const extension = (fileName.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0] ?? "").toLowerCase();
+  const walletPart = address.replace(/^0x/, "").slice(-8);
+  const randomPart = crypto.randomUUID().replace(/-/g, "").slice(0, 18);
+  return cleanBlobFileName(`c-${walletPart}-${randomPart}${extension}`).slice(0, 48);
+}
+
+async function fileBytes(file: File) {
+  return new Uint8Array(await file.arrayBuffer());
+}
+
+function compactFileName(name?: string | null, max = 64) {
+  if (!name) return "Shelby file";
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot) : "";
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const room = Math.max(18, max - extension.length - 3);
+  return `${base.slice(0, room)}...${extension}`;
+}
+
+function isEditableTextContent(item: any) {
+  const type = String(item.file_type || "");
+  const name = String(item.file_name || "");
+  return type.startsWith("text/") || type === "application/json" || name.endsWith(".md") || name.endsWith(".txt");
+}
+
+function fileSizeLabel(size?: number) {
+  if (!size) return "";
+  if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
 function VaultContentViewer({ item, onClose }: { item: any; onClose: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
@@ -239,9 +272,39 @@ function ContentSettingsModal({
   const [thumbnailPreview, setThumbnailPreview] = useState("");
   const [allowDownload, setAllowDownload] = useState(item.allow_download !== false);
   const [isPreview, setIsPreview] = useState(Boolean(item.is_preview));
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+  const [textBody, setTextBody] = useState("");
+  const [initialTextBody, setInitialTextBody] = useState("");
+  const [loadingTextBody, setLoadingTextBody] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const textEditable = isEditableTextContent(item);
+
+  useEffect(() => {
+    let active = true;
+    if (!textEditable || !item.blob_id) return;
+
+    async function loadTextBody() {
+      setLoadingTextBody(true);
+      try {
+        const bytes = await readShelbyBlob({ walletAddress: item.wallet_address, blobName: item.blob_id });
+        if (!active) return;
+        const value = new TextDecoder().decode(bytes);
+        setTextBody(value);
+        setInitialTextBody(value);
+      } catch {
+        if (active) setStatus("Current text blob could not be loaded. You can still write a replacement.");
+      } finally {
+        if (active) setLoadingTextBody(false);
+      }
+    }
+
+    void loadTextBody();
+    return () => {
+      active = false;
+    };
+  }, [item.blob_id, item.wallet_address, textEditable]);
 
   async function uploadThumbnail(file?: File | null) {
     if (!file || !address) return;
@@ -281,11 +344,76 @@ function ContentSettingsModal({
     }
   }
 
+  async function uploadReplacementBlob(blobFile: File) {
+    if (!address) throw new Error("Connect Petra before replacing content.");
+    if (blobFile.size > maxUploadBytes) throw new Error("Files are limited to 100MB.");
+    const typeAllowed = acceptedUploadTypes.includes(blobFile.type) || blobFile.name.endsWith(".md");
+    if (!typeAllowed) throw new Error("Unsupported file type.");
+
+    const bytes = await fileBytes(blobFile);
+    const blobName = shortContentBlobName(address, blobFile.name);
+    const expirationMicros = Date.now() * 1000 + 365 * 24 * 60 * 60 * 1_000_000;
+
+    setStatus("Registering replacement content on Shelbynet.");
+    const payload = await createClientBlobRegistration({
+      walletAddress: address,
+      blobName,
+      blobData: bytes,
+      expirationMicros
+    });
+    const tx = await signAndSubmitTransaction(payload);
+    await waitForShelbynetTransaction(tx.hash);
+    await waitForShelbyBlobMetadata({ walletAddress: address, blobName });
+
+    await putShelbyBlobWithRetry({
+      walletAddress: address,
+      blobName,
+      blobData: bytes,
+      file: blobFile,
+      walletFetch,
+      onStatus: setStatus
+    });
+
+    return { blobName, txHash: tx.hash, sizeBytes: blobFile.size };
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setStatus("");
     try {
+      let replacement: {
+        blob_id: string;
+        onchain_tx_hash: string;
+        file_type: string;
+        file_name: string;
+        size_bytes: number;
+      } | null = null;
+
+      if (replacementFile) {
+        const upload = await uploadReplacementBlob(replacementFile);
+        replacement = {
+          blob_id: upload.blobName,
+          onchain_tx_hash: upload.txHash,
+          file_type: replacementFile.type || "application/octet-stream",
+          file_name: replacementFile.name,
+          size_bytes: upload.sizeBytes
+        };
+      } else if (textEditable && textBody !== initialTextBody) {
+        const fileName = item.file_name?.endsWith(".md") || item.file_type === "text/markdown"
+          ? `${cleanBlobFileName(title || item.title || "post")}.md`
+          : (item.file_name || `${cleanBlobFileName(title || item.title || "post")}.txt`);
+        const textFile = new File([textBody], fileName, { type: item.file_type || "text/plain" });
+        const upload = await uploadReplacementBlob(textFile);
+        replacement = {
+          blob_id: upload.blobName,
+          onchain_tx_hash: upload.txHash,
+          file_type: textFile.type || "text/plain",
+          file_name: textFile.name,
+          size_bytes: upload.sizeBytes
+        };
+      }
+
       const response = await walletFetch(`/api/content/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -294,7 +422,8 @@ function ContentSettingsModal({
           description,
           thumbnail_blob_id: thumbnailBlobId,
           allow_download: allowDownload,
-          is_preview: isPreview
+          is_preview: isPreview,
+          ...(replacement ?? {})
         })
       });
       const json = await response.json();
@@ -310,7 +439,7 @@ function ContentSettingsModal({
 
   return (
     <div className="fixed inset-0 z-[85] bg-black/70 p-4 backdrop-blur-sm">
-      <form onSubmit={save} className="mx-auto mt-10 max-w-2xl border border-base bg-[color:var(--color-bg)] p-5">
+      <form onSubmit={save} className="mx-auto max-h-[calc(100vh-2rem)] max-w-2xl overflow-y-auto border border-base bg-[color:var(--color-bg)] p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="font-display text-4xl leading-none">File settings</p>
@@ -348,6 +477,44 @@ function ContentSettingsModal({
               </div>
             </div>
           </label>
+          <div className="border border-base p-4">
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+              <div className="min-w-0">
+                <p className="text-sm text-text-secondary">Content file</p>
+                <p className="mt-2 truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.blob_id}>
+                  Current: {compactFileName(item.file_name || item.blob_id, 72)}
+                </p>
+                {replacementFile ? (
+                  <p className="mt-1 truncate font-mono text-xs text-brand" title={replacementFile.name}>
+                    Replacement: {compactFileName(replacementFile.name, 72)} {fileSizeLabel(replacementFile.size)}
+                  </p>
+                ) : null}
+              </div>
+              <label className="interactive-control inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center border border-base px-3 font-mono text-xs">
+                Replace local file
+                <input type="file" onChange={(event) => setReplacementFile(event.target.files?.[0] ?? null)} className="sr-only" />
+              </label>
+            </div>
+            {textEditable ? (
+              <label className="mt-4 block text-sm text-text-secondary">
+                Edit text body
+                <textarea
+                  value={textBody}
+                  disabled={loadingTextBody || Boolean(replacementFile)}
+                  onChange={(event) => setTextBody(event.target.value)}
+                  placeholder={loadingTextBody ? "Loading current Shelby text" : "Write a replacement text body."}
+                  className="mt-2 min-h-44 w-full border border-base bg-transparent px-3 py-3 font-mono text-sm leading-6 text-text-primary outline-none focus:border-brand disabled:opacity-50"
+                />
+                <span className="mt-2 block font-mono text-[10px] text-text-tertiary">
+                  {replacementFile ? "The selected local file will replace this text edit." : "Saving changed text publishes a new Shelby blob and points this post to it."}
+                </span>
+              </label>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-text-tertiary">
+                This upload is binary media. Replace it with another local file to update the storefront item.
+              </p>
+            )}
+          </div>
           <label className="block text-sm text-text-secondary">
             Title
             <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full border border-base bg-transparent px-3 py-3 text-text-primary outline-none focus:border-brand" required />
@@ -555,36 +722,52 @@ export function VaultClient() {
               </Link>
             </div>
             {contentStatus ? <p className="mb-4 border border-base p-3 font-mono text-xs text-text-secondary">{contentStatus}</p> : null}
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {latestContent.length === 0 ? (
                 <EmptyState title="Publish the first object in your vault." body="Upload a preview, essay, audio file, deck, dataset, or video. It will appear here as a creator-owned Shelby file with view activity." action="Upload content" href="/vault/upload" icon={Upload} />
               ) : latestContent.map((item) => (
-                <div key={item.id} className="vault-file-row grid gap-4 p-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-                  <FileKind fileType={item.file_type} />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button type="button" onClick={() => setViewerItem(item)} className="interactive-control min-w-0 max-w-full text-left">
-                        <span className="block truncate font-display text-3xl leading-none text-text-primary">{item.title}</span>
-                      </button>
-                      <span className="border border-base px-2 py-1 font-mono text-[10px] text-text-tertiary">{item.is_preview ? "PREVIEW" : "LOCKED"}</span>
-                      <span className="border border-base px-2 py-1 font-mono text-[10px] text-text-tertiary">{item.allow_download ? "DOWNLOAD" : "STREAM"}</span>
+                <article key={item.id} className="market-card grid overflow-hidden md:grid-cols-[0.48fr_1fr]">
+                  <div className="relative min-h-56 border-b border-[color:var(--market-border)] bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:28px_28px] md:border-b-0 md:border-r">
+                    {item.thumbnail_blob_id ? (
+                      <ShelbyBlobImage
+                        walletAddress={item.wallet_address}
+                        blobId={item.thumbnail_blob_id}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <FileKind fileType={item.file_type} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex min-h-56 flex-col p-5">
+                    <div className="flex flex-wrap gap-2 font-mono text-[10px] text-text-tertiary">
+                      <span className="border border-base px-2 py-1">{item.file_type || "file"}</span>
+                      <span className="border border-base px-2 py-1">{formatDate(item.created_at)}</span>
+                      <span className="border border-base px-2 py-1 text-brand">{item.is_preview ? "PREVIEW" : "LOCKED"}</span>
+                      <span className="border border-base px-2 py-1">{item.allow_download ? "DOWNLOAD" : "STREAM"}</span>
                     </div>
-                    <p className="mt-2 max-w-full truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.file_type || "file"}>
-                      {item.view_count ?? 0} views / {formatDate(item.created_at)} / {item.file_name || item.file_type || "file"}
+                    <button type="button" onClick={() => setViewerItem(item)} className="interactive-control mt-7 min-w-0 text-left">
+                      <span className="block truncate font-display text-5xl leading-none text-text-primary" title={item.title}>{item.title}</span>
+                    </button>
+                    <p className="mt-4 line-clamp-2 text-sm leading-6 text-text-tertiary">{item.description || "No description added yet."}</p>
+                    <p className="mt-3 truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.file_type || "file"}>
+                      {item.view_count ?? 0} views / {item.file_name || item.file_type || "file"}
                     </p>
+                    <div className="mt-auto flex flex-wrap gap-2 pt-8">
+                      <button type="button" onClick={() => setViewerItem(item)} className="interactive-control inline-flex min-h-10 flex-1 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary hover:text-text-primary">
+                        Open
+                      </button>
+                      <button type="button" onClick={() => setSettingsItem(item)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="File settings">
+                        <Settings className="h-4 w-4" />
+                      </button>
+                      <button type="button" onClick={() => removeContent(item.id)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="Delete content">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setViewerItem(item)} className="interactive-control inline-flex h-10 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary hover:text-text-primary">
-                      Open
-                    </button>
-                    <button type="button" onClick={() => setSettingsItem(item)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="File settings">
-                      <Settings className="h-4 w-4" />
-                    </button>
-                    <button type="button" onClick={() => removeContent(item.id)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="Delete content">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+                </article>
               ))}
             </div>
           </section>

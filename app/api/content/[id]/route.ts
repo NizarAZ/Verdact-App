@@ -16,16 +16,32 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const title = text(body.title, 120);
     if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
 
+    const patch: Record<string, unknown> = {
+      title,
+      description: text(body.description, 1000) || null,
+      thumbnail_blob_id: text(body.thumbnail_blob_id, 300) || null,
+      allow_download: body.allow_download !== false,
+      is_preview: Boolean(body.is_preview)
+    };
+
+    const replacementBlobId = text(body.blob_id, 300);
+    const replacementTxHash = text(body.onchain_tx_hash, 120);
+    if (replacementBlobId || replacementTxHash) {
+      if (!replacementBlobId || !replacementTxHash) {
+        return NextResponse.json({ error: "Replacement content needs both blob and transaction hash." }, { status: 400 });
+      }
+      patch.blob_id = replacementBlobId;
+      patch.onchain_tx_hash = replacementTxHash;
+      patch.file_type = text(body.file_type, 120) || "application/octet-stream";
+      patch.file_name = text(body.file_name, 255) || null;
+      patch.size_bytes = Number.isFinite(Number(body.size_bytes)) ? Number(body.size_bytes) : null;
+      patch.duration_seconds = Number.isFinite(Number(body.duration_seconds)) ? Number(body.duration_seconds) : null;
+    }
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("content")
-      .update({
-        title,
-        description: text(body.description, 1000) || null,
-        thumbnail_blob_id: text(body.thumbnail_blob_id, 300) || null,
-        allow_download: body.allow_download !== false,
-        is_preview: Boolean(body.is_preview)
-      })
+      .update(patch)
       .eq("id", params.id)
       .eq("wallet_address", walletAddress)
       .select("*")
