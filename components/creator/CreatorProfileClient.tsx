@@ -435,6 +435,12 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
                       blobId={item.thumbnail_blob_id}
                       alt=""
                       className="absolute inset-0 h-full w-full object-cover"
+                      fallback={
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+                          {viewable ? <Icon className="h-8 w-8 text-[color:var(--color-pink)]" /> : <Lock className="h-8 w-8 text-text-tertiary" />}
+                          <p className="px-4 font-mono text-[10px] leading-5 text-text-tertiary">Banner saved. Waiting for Shelby image.</p>
+                        </div>
+                      }
                     />
                   ) : null}
                   {!item.thumbnail_blob_id ? <div className="absolute inset-0 flex items-center justify-center">

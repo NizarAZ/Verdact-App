@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { createBlobObjectUrl, readShelbyBlob } from "@/lib/shelby-browser";
+import { readShelbyBlob } from "@/lib/shelby-browser";
 
 type ShelbyBlobImageProps = {
   walletAddress?: string | null;
@@ -32,7 +32,9 @@ export function ShelbyBlobImage({ walletAddress, blobId, alt, className, fallbac
         }
         try {
           const bytes = await readShelbyBlob({ walletAddress, blobName: blobId });
-          objectUrl = createBlobObjectUrl(bytes, "image/*");
+          const buffer = new ArrayBuffer(bytes.byteLength);
+          new Uint8Array(buffer).set(bytes);
+          objectUrl = URL.createObjectURL(new Blob([buffer]));
           if (active) setUrl(objectUrl);
           return;
         } catch {
@@ -49,5 +51,5 @@ export function ShelbyBlobImage({ walletAddress, blobId, alt, className, fallbac
   }, [walletAddress, blobId]);
 
   if (!url || failed) return <>{fallback ?? null}</>;
-  return <img src={url} alt={alt} className={className} />;
+  return <img src={url} alt={alt} className={className} onError={() => setFailed(true)} />;
 }

@@ -769,6 +769,12 @@ ${vault.is_paid ? `Subscribe from ${formatAmount(vault.price_monthly)} ShelbyUSD
                         blobId={item.thumbnail_blob_id}
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover"
+                        fallback={
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+                            <FileKind fileType={item.file_type} />
+                            <p className="px-4 font-mono text-[10px] leading-5 text-text-tertiary">Banner saved. Waiting for Shelby image.</p>
+                          </div>
+                        }
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -793,6 +799,11 @@ ${vault.is_paid ? `Subscribe from ${formatAmount(vault.price_monthly)} ShelbyUSD
                     {item.blob_id ? (
                       <a href={getShelbyBlobUrl(item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-3 inline-flex items-center gap-2 font-mono text-xs text-brand">
                         Blob ID: {truncateMiddle(item.blob_id, 10, 8)} <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                    {item.thumbnail_blob_id ? (
+                      <a href={getShelbyBlobUrl(item.thumbnail_blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex items-center gap-2 font-mono text-xs text-text-tertiary">
+                        Banner ID: {truncateMiddle(item.thumbnail_blob_id, 10, 8)} <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     ) : null}
                     <div className="mt-auto flex flex-wrap gap-2 pt-8">
