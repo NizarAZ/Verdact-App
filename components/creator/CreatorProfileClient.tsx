@@ -466,7 +466,7 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
                       </button>
                     ) : null}
                     {state.isOwner && item.blob_id ? (
-                      <a href={getShelbyBlobUrl(item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control inline-flex min-h-10 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary">
+                      <a href={getShelbyBlobUrl(item.wallet_address, item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control inline-flex min-h-10 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary">
                         View on Shelby
                       </a>
                     ) : null}

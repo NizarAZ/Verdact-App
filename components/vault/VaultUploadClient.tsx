@@ -10,6 +10,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { acceptedUploadInput, acceptedUploadTypes, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { createClientBlobRegistration, putShelbyBlobWithRetry, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
+import { getShelbyBlobUrl } from "@/lib/shelby-explorer";
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
@@ -292,7 +293,7 @@ export function VaultUploadClient() {
                 <div className="upload-success mt-4 border border-base p-3 font-mono text-xs text-text-secondary">
                   <p className="text-brand">File stored on Shelby Protocol</p>
                   <p className="mt-2">Blob ID: <code>{success.blobId}</code></p>
-                  <a href={`https://explorer.shelbynet.shelby.xyz/blob/${encodeURIComponent(success.blobId)}`} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex text-brand">
+                  <a href={getShelbyBlobUrl(address, success.blobId)} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex text-brand">
                     Verify on Shelby Explorer
                   </a>
                 </div>

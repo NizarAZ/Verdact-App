@@ -1,13 +1,16 @@
-const shelbyExplorerBase = "https://explorer.shelbynet.shelby.xyz";
+const shelbyExplorerBase = "https://explorer.shelby.xyz";
+const aptosExplorerTxnBase = "https://explorer.aptoslabs.com/txn";
 
 export function getShelbyTxnUrl(txHash?: string | null) {
-  return txHash ? `${shelbyExplorerBase}/txn/${encodeURIComponent(txHash)}` : "";
+  return txHash ? `${aptosExplorerTxnBase}/${encodeURIComponent(txHash)}?network=shelbynet` : "";
 }
 
-export function getShelbyBlobUrl(blobName?: string | null) {
-  return blobName ? `${shelbyExplorerBase}/blob/${encodeURIComponent(blobName)}` : "";
+export function getShelbyBlobUrl(accountAddress?: string | null, blobName?: string | null) {
+  if (!accountAddress) return "";
+  const base = `${shelbyExplorerBase}/shelbynet/account/${encodeURIComponent(accountAddress)}/blobs`;
+  return blobName ? `${base}?name=${encodeURIComponent(blobName)}` : base;
 }
 
 export function getShelbyAccountBlobsUrl(accountAddress: string) {
-  return `${shelbyExplorerBase}/account/${encodeURIComponent(accountAddress)}/blobs`;
+  return `${shelbyExplorerBase}/shelbynet/account/${encodeURIComponent(accountAddress)}/blobs`;
 }

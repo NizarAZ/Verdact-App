@@ -797,12 +797,12 @@ ${vault.is_paid ? `Subscribe from ${formatAmount(vault.price_monthly)} ShelbyUSD
                       {item.view_count ?? 0} views / {item.file_name || item.file_type || "file"}
                     </p>
                     {item.blob_id ? (
-                      <a href={getShelbyBlobUrl(item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-3 inline-flex items-center gap-2 font-mono text-xs text-brand">
+                      <a href={getShelbyBlobUrl(item.wallet_address, item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-3 inline-flex items-center gap-2 font-mono text-xs text-brand">
                         Blob ID: {truncateMiddle(item.blob_id, 10, 8)} <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     ) : null}
                     {item.thumbnail_blob_id ? (
-                      <a href={getShelbyBlobUrl(item.thumbnail_blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex items-center gap-2 font-mono text-xs text-text-tertiary">
+                      <a href={getShelbyBlobUrl(item.wallet_address, item.thumbnail_blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex items-center gap-2 font-mono text-xs text-text-tertiary">
                         Banner ID: {truncateMiddle(item.thumbnail_blob_id, 10, 8)} <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     ) : null}
