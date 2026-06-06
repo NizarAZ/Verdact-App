@@ -34,6 +34,8 @@ export type ContentRecord = {
   thumbnail_blob_id: string | null;
   allow_download: boolean;
   is_preview: boolean;
+  is_locked: boolean;
+  tags: string[] | null;
   created_at: string | null;
 };
 
@@ -44,6 +46,7 @@ export type DonationRecord = {
   amount: number;
   message: string | null;
   tx_hash: string;
+  block_height: string | null;
   created_at: string | null;
 };
 
@@ -52,6 +55,7 @@ export type SubscriptionRecord = {
   subscriber_wallet: string;
   creator_wallet: string;
   tx_hash: string;
+  block_height: string | null;
   amount_paid: number;
   starts_at: string | null;
   expires_at: string;
@@ -59,7 +63,14 @@ export type SubscriptionRecord = {
 
 export type CreatorCard = VaultRecord & {
   content_count: number;
+  preview_count: number;
   latest_preview_content: Pick<ContentRecord, "id" | "title" | "file_type" | "is_preview" | "created_at">[];
+};
+
+export type CategoryStat = {
+  category: string;
+  creators: number;
+  files: number;
 };
 
 export { categories };
@@ -83,7 +94,7 @@ export function getSupabaseAdmin() {
 export async function listCreators(params: {
   access?: "all" | "free" | "paid";
   category?: string;
-  sort?: "newest" | "subscribers" | "content";
+  sort?: "newest" | "subscribers" | "content" | "price_low" | "price_high";
   q?: string;
 } = {}) {
   const supabase = getSupabaseAdmin();
@@ -95,6 +106,10 @@ export async function listCreators(params: {
 
   if (params.sort === "subscribers") {
     query = query.order("subscriber_count", { ascending: false });
+  } else if (params.sort === "price_low") {
+    query = query.order("price_monthly", { ascending: true });
+  } else if (params.sort === "price_high") {
+    query = query.order("price_monthly", { ascending: false });
   } else {
     query = query.order("created_at", { ascending: false });
   }
@@ -117,6 +132,7 @@ export async function listCreators(params: {
 
   const ids = vaults.map((vault) => vault.id);
   const counts = new Map<string, number>();
+  const previewCounts = new Map<string, number>();
   const latestPreview = new Map<string, CreatorCard["latest_preview_content"]>();
 
   if (ids.length > 0) {
@@ -129,6 +145,7 @@ export async function listCreators(params: {
     for (const item of content ?? []) {
       counts.set(item.vault_id, (counts.get(item.vault_id) ?? 0) + 1);
       if (item.is_preview) {
+        previewCounts.set(item.vault_id, (previewCounts.get(item.vault_id) ?? 0) + 1);
         const previews = latestPreview.get(item.vault_id) ?? [];
         if (previews.length < 3) {
           previews.push({
@@ -147,6 +164,7 @@ export async function listCreators(params: {
   const creators = vaults.map((vault) => ({
     ...vault,
     content_count: counts.get(vault.id) ?? 0,
+    preview_count: previewCounts.get(vault.id) ?? 0,
     latest_preview_content: latestPreview.get(vault.id) ?? []
   }));
 
@@ -155,6 +173,31 @@ export async function listCreators(params: {
   }
 
   return creators satisfies CreatorCard[];
+}
+
+export async function getCategoryStats() {
+  const supabase = getSupabaseAdmin();
+  const { data: vaults, error } = await supabase.from("vaults").select("id,category");
+  if (error) throw error;
+
+  const ids = (vaults ?? []).map((vault) => vault.id);
+  const filesByVault = new Map<string, number>();
+  if (ids.length > 0) {
+    const { data: content, error: contentError } = await supabase.from("content").select("vault_id").in("vault_id", ids);
+    if (contentError) throw contentError;
+    for (const item of content ?? []) filesByVault.set(item.vault_id, (filesByVault.get(item.vault_id) ?? 0) + 1);
+  }
+
+  const stats = new Map<string, CategoryStat>();
+  for (const vault of vaults ?? []) {
+    const category = vault.category || "Other";
+    const current = stats.get(category) ?? { category, creators: 0, files: 0 };
+    current.creators += 1;
+    current.files += filesByVault.get(vault.id) ?? 0;
+    stats.set(category, current);
+  }
+
+  return [...stats.values()];
 }
 
 export async function getVaultByWallet(walletAddress: string) {
@@ -184,6 +227,18 @@ export async function getContentForVault(vaultId: string) {
   return (data ?? []) as ContentRecord[];
 }
 
+export function redactLockedContent(content: ContentRecord[], canAccessLocked: boolean) {
+  return content.map((item) => {
+    if (canAccessLocked || item.is_preview || !item.is_locked) return item;
+    return {
+      ...item,
+      blob_id: null,
+      onchain_tx_hash: null,
+      thumbnail_blob_id: null
+    };
+  });
+}
+
 export async function getActiveSubscription(subscriberWallet: string, creatorWallet: string) {
   const subscriber = normalizeWalletAddress(subscriberWallet);
   const creator = normalizeWalletAddress(creatorWallet);
@@ -202,6 +257,39 @@ export async function getActiveSubscription(subscriberWallet: string, creatorWal
 
   if (error) throw error;
   return data as SubscriptionRecord | null;
+}
+
+export async function getLatestSubscription(subscriberWallet: string, creatorWallet: string) {
+  const subscriber = normalizeWalletAddress(subscriberWallet);
+  const creator = normalizeWalletAddress(creatorWallet);
+  if (!subscriber || !creator) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("subscriber_wallet", subscriber)
+    .eq("creator_wallet", creator)
+    .order("expires_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as SubscriptionRecord | null;
+}
+
+export async function creatorHasVerifiedPayments(creatorWallet: string) {
+  const creator = normalizeWalletAddress(creatorWallet);
+  if (!creator) return false;
+
+  const supabase = getSupabaseAdmin();
+  const { count, error } = await supabase
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("creator_wallet", creator);
+
+  if (error) throw error;
+  return Boolean(count && count > 0);
 }
 
 export async function hasFavourite(subscriberWallet: string, creatorWallet: string) {

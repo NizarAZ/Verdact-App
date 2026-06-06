@@ -18,6 +18,19 @@ function sumByDay<T>(items: T[], getDate: (item: T) => string | null | undefined
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, value]) => ({ date, value }));
 }
 
+function rollingThirtyDays(points: Array<{ date: string; value: number }>) {
+  const values = new Map(points.map((point) => [point.date, point.value]));
+  const today = new Date();
+  const result: Array<{ date: string; value: number }> = [];
+  for (let index = 29; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    const key = date.toISOString().slice(0, 10);
+    result.push({ date: key, value: values.get(key) ?? 0 });
+  }
+  return result;
+}
+
 export async function GET(request: Request) {
   try {
     const walletAddress = getWalletAddress(request);
@@ -50,16 +63,28 @@ export async function GET(request: Request) {
 
     const viewsByContent = new Map<string, number>();
     for (const view of views.data ?? []) viewsByContent.set(view.content_id, (viewsByContent.get(view.content_id) ?? 0) + 1);
+    const now = new Date();
+    const activeSubscribers = (subscriptions.data ?? []).filter((item) => new Date(item.expires_at) > now).length;
+    const churnedSubscribers = Math.max(0, (subscriptions.data ?? []).length - activeSubscribers);
+    const fileTypes = new Map<string, number>();
+    for (const item of content) {
+      const key = item.file_type?.split("/")[0] || "file";
+      fileTypes.set(key, (fileTypes.get(key) ?? 0) + 1);
+    }
+    const viewsOverTime = rollingThirtyDays(sumByDay(views.data ?? [], (item) => item.viewed_at, () => 1));
+    const earningsOverTime = rollingThirtyDays(sumByDay(
+      [...(subscriptions.data ?? []), ...(donations.data ?? [])],
+      (item) => ("starts_at" in item ? item.starts_at : item.created_at),
+      (item) => Number("amount_paid" in item ? item.amount_paid : item.amount)
+    ));
 
     return NextResponse.json({
       viewsPerContent: content.map((item) => ({ name: item.title, views: viewsByContent.get(item.id) ?? 0 })),
-      viewsOverTime: sumByDay(views.data ?? [], (item) => item.viewed_at, () => 1),
+      viewsOverTime,
       subscribersOverTime: sumByDay(subscriptions.data ?? [], (item) => item.starts_at, () => 1),
-      earningsOverTime: sumByDay(
-        [...(subscriptions.data ?? []), ...(donations.data ?? [])],
-        (item) => ("starts_at" in item ? item.starts_at : item.created_at),
-        (item) => Number("amount_paid" in item ? item.amount_paid : item.amount)
-      ),
+      earningsOverTime,
+      subscriberRetention: { active: activeSubscribers, churned: churnedSubscribers },
+      fileTypeBreakdown: [...fileTypes.entries()].map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count),
       topContent: content
         .map((item) => ({ ...item, view_count: viewsByContent.get(item.id) ?? 0 }))
         .sort((a, b) => b.view_count - a.view_count)

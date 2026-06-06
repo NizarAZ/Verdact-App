@@ -19,6 +19,9 @@ export async function POST(request: Request) {
     const title = text(body.title, 120);
     const blobId = text(body.blob_id, 300);
     const txHash = text(body.onchain_tx_hash, 120);
+    const visibility = text(body.visibility, 40);
+    const isPreview = visibility === "preview" || Boolean(body.is_preview);
+    const isLocked = visibility === "locked" || Boolean(body.is_locked);
 
     if (!title || !blobId || !txHash) {
       return NextResponse.json({ error: "Missing content title, blob, or transaction." }, { status: 400 });
@@ -40,7 +43,9 @@ export async function POST(request: Request) {
         duration_seconds: Number.isFinite(Number(body.duration_seconds)) ? Number(body.duration_seconds) : null,
         thumbnail_blob_id: text(body.thumbnail_blob_id, 300) || null,
         allow_download: body.allow_download !== false,
-        is_preview: Boolean(body.is_preview)
+        is_preview: isPreview,
+        is_locked: isLocked && !isPreview,
+        tags: Array.isArray(body.tags) ? body.tags.map((tag: unknown) => text(tag, 40)).filter(Boolean).slice(0, 12) : []
       })
       .select("*")
       .single();

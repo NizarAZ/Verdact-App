@@ -8,15 +8,19 @@ import { ArrowUpRight, BadgeDollarSign, Eye, FileText, Image as ImageIcon, LockK
 import type { LucideIcon } from "lucide-react";
 import { PublicNav } from "@/components/marketplace/PublicNav";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
+import { ShelbyLogo } from "@/components/shelby-logo";
 import { formatAmount, truncateMiddle } from "@/lib/format";
-import type { CreatorCard } from "@/lib/supabase-server";
+import { categories } from "@/lib/constants";
+import type { CategoryStat, CreatorCard } from "@/lib/supabase-server";
 
 type MarketplaceExperienceProps = {
   creators: CreatorCard[];
+  latestDropCreators: CreatorCard[];
+  categoryStats: CategoryStat[];
   filters: {
     access: "all" | "free" | "paid";
     category: string;
-    sort: "newest" | "subscribers" | "content";
+    sort: "newest" | "subscribers" | "content" | "price_low" | "price_high";
     q: string;
   };
 };
@@ -260,27 +264,21 @@ function LaneFeatureCard({ lane, index, creatorCount, fileCount }: { lane: (type
   );
 }
 
-export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) {
+export function MarketplaceExperience({ creators, latestDropCreators, categoryStats, filters }: MarketplaceExperienceProps) {
   const spotlight = creators[0];
   const gridCreators = creators;
   const feedCreators = creators.slice(0, 7);
-  const latestDrops = useMemo(() => creators.flatMap((creator) => creator.latest_preview_content.map((item) => ({ creator, item }))).slice(0, 6), [creators]);
+  const latestDrops = useMemo(() => latestDropCreators.flatMap((creator) => creator.latest_preview_content.map((item) => ({ creator, item }))).slice(0, 6), [latestDropCreators]);
   const categorySummary = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const creator of creators) counts.set(creator.category || "Other", (counts.get(creator.category || "Other") ?? 0) + 1);
+    for (const stat of categoryStats) counts.set(stat.category || "Other", stat.creators);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [creators]);
-  const categoryStats = useMemo(() => {
+  }, [categoryStats]);
+  const categoryStatsMap = useMemo(() => {
     const stats = new Map<string, { creators: number; files: number }>();
-    for (const creator of creators) {
-      const category = creator.category || "Other";
-      const current = stats.get(category) ?? { creators: 0, files: 0 };
-      current.creators += 1;
-      current.files += creator.content_count;
-      stats.set(category, current);
-    }
+    for (const stat of categoryStats) stats.set(stat.category || "Other", { creators: stat.creators, files: stat.files });
     return stats;
-  }, [creators]);
+  }, [categoryStats]);
   const totals = useMemo(() => ({
     creators: creators.length,
     files: creators.reduce((total, creator) => total + creator.content_count, 0),
@@ -424,6 +422,46 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
         </div>
       </section>
 
+      <section className="container-shell py-8" data-pattern="filters">
+        <form action="/explore" className="market-filter-grid">
+          <label>
+            <span>Search</span>
+            <input
+              name="q"
+              defaultValue={filters.q}
+              placeholder="Search creators by name, category, or description..."
+              className="market-filter-input"
+            />
+          </label>
+          <label>
+            <span>Category</span>
+            <select name="category" defaultValue={filters.category} className="market-filter-input">
+              <option value="">All categories</option>
+              {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Access</span>
+            <select name="access" defaultValue={filters.access} className="market-filter-input">
+              <option value="all">All access</option>
+              <option value="free">Free</option>
+              <option value="paid">Paid</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select name="sort" defaultValue={filters.sort} className="market-filter-input">
+              <option value="newest">Newest</option>
+              <option value="subscribers">Most subscribers</option>
+              <option value="price_low">Price: low to high</option>
+              <option value="price_high">Price: high to low</option>
+              <option value="content">Most content</option>
+            </select>
+          </label>
+          <button type="submit" className="interactive-control market-filter-button">Apply filters</button>
+        </form>
+      </section>
+
       <section className="container-shell grid gap-8 py-16 lg:grid-cols-[0.72fr_1.28fr]" data-pattern="sticky-stack">
         <div className="lg:sticky lg:top-8 lg:h-fit">
           <h2 className="font-display text-7xl leading-none text-[color:var(--market-text)]">Find the vault that fits your feed.</h2>
@@ -437,8 +475,8 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
               key={lane.category}
               lane={lane}
               index={index}
-              creatorCount={categoryStats.get(lane.category)?.creators ?? 0}
-              fileCount={categoryStats.get(lane.category)?.files ?? 0}
+              creatorCount={categoryStatsMap.get(lane.category)?.creators ?? 0}
+              fileCount={categoryStatsMap.get(lane.category)?.files ?? 0}
             />
           ))}
         </div>
@@ -568,6 +606,11 @@ export function MarketplaceExperience({ creators }: MarketplaceExperienceProps) 
           </div>
         </div>
       </section>
+      <footer className="container-shell flex flex-wrap items-center gap-2 border-t border-[color:var(--market-border)] py-8 font-mono text-xs text-[color:var(--market-muted)]">
+        <span>Built on</span>
+        <ShelbyLogo className="h-5 w-5" />
+        <span>Shelby Protocol and Aptos</span>
+      </footer>
     </main>
   );
 }

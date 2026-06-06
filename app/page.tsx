@@ -1,6 +1,6 @@
 import { MarketplaceExperience } from "@/components/marketplace/MarketplaceExperience";
 import { categories } from "@/lib/constants";
-import { listCreators } from "@/lib/supabase-server";
+import { getCategoryStats, listCreators } from "@/lib/supabase-server";
 import { unstable_noStore as noStore } from "next/cache";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +15,13 @@ export default async function HomePage({
   noStore();
   const access = searchParams.access === "free" || searchParams.access === "paid" ? searchParams.access : "all";
   const category = typeof searchParams.category === "string" && categories.includes(searchParams.category as any) ? searchParams.category : "";
-  const sort = searchParams.sort === "subscribers" || searchParams.sort === "content" ? searchParams.sort : "newest";
+  const sort = searchParams.sort === "subscribers" || searchParams.sort === "content" || searchParams.sort === "price_low" || searchParams.sort === "price_high" ? searchParams.sort : "newest";
   const q = typeof searchParams.q === "string" ? searchParams.q : "";
-  const creators = await listCreators({ access, category, sort, q });
+  const [creators, latestDropCreators, categoryStats] = await Promise.all([
+    listCreators({ access, category, sort, q }),
+    listCreators({ sort: "newest" }),
+    getCategoryStats()
+  ]);
 
-  return <MarketplaceExperience creators={creators} filters={{ access, category, sort, q }} />;
+  return <MarketplaceExperience creators={creators} latestDropCreators={latestDropCreators} categoryStats={categoryStats} filters={{ access, category, sort, q }} />;
 }

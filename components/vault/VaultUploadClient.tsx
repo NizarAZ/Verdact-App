@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Check, FileArchive, Image as ImageIcon, Lock, PenLine, Radio, UploadCloud } from "lucide-react";
+import { Check, FileArchive, Image as ImageIcon, PenLine, Radio, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
@@ -51,7 +51,8 @@ export function VaultUploadClient() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [allowDownload, setAllowDownload] = useState(true);
-  const [isPreview, setIsPreview] = useState(false);
+  const [visibility, setVisibility] = useState<"preview" | "locked" | "free">("preview");
+  const [success, setSuccess] = useState<{ blobId: string; txHash: string } | null>(null);
   const [step, setStep] = useState<"idle" | "registering" | "signing" | "uploading" | "confirmed">("idle");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -136,12 +137,15 @@ export function VaultUploadClient() {
           size_bytes: uploadFile.size,
           thumbnail_blob_id: thumbnailBlobId || null,
           allow_download: allowDownload,
-          is_preview: isPreview
+          visibility,
+          is_preview: visibility === "preview" || visibility === "free",
+          is_locked: visibility === "locked"
         })
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Failed to save content.");
-      router.push("/vault");
+      setSuccess({ blobId: blobName, txHash });
+      window.setTimeout(() => router.push("/vault"), 1800);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Upload failed.");
     } finally {
@@ -253,9 +257,17 @@ export function VaultUploadClient() {
                   <span className="flex items-center gap-3"><FileArchive className="h-4 w-4 text-brand" /> Allow download</span>
                   <input type="checkbox" checked={allowDownload} onChange={(event) => setAllowDownload(event.target.checked)} />
                 </label>
-                <label className="vault-fieldset flex items-center justify-between p-4 text-sm text-text-secondary">
-                  <span className="flex items-center gap-3"><Lock className="h-4 w-4 text-brand" /> Mark as preview</span>
-                  <input type="checkbox" checked={isPreview} onChange={(event) => setIsPreview(event.target.checked)} />
+                <label className="block text-sm text-text-secondary">
+                  Who can see this file?
+                  <select
+                    value={visibility}
+                    onChange={(event) => setVisibility(event.target.value as "preview" | "locked" | "free")}
+                    className="mt-2 w-full border border-base bg-transparent px-3 py-3 font-mono text-xs text-text-primary outline-none focus:border-brand"
+                  >
+                    <option value="preview">Public Preview</option>
+                    <option value="locked">Locked (subscribers only)</option>
+                    <option value="free">Free/Public</option>
+                  </select>
                 </label>
               </div>
             </div>
@@ -276,6 +288,15 @@ export function VaultUploadClient() {
               <button type="submit" disabled={busy || (mode === "file" ? !file : !postBody.trim())} className="interactive-control mt-5 min-h-12 w-full bg-brand px-4 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
                 {busy ? "Publishing" : "Publish to vault"}
               </button>
+              {success ? (
+                <div className="upload-success mt-4 border border-base p-3 font-mono text-xs text-text-secondary">
+                  <p className="text-brand">File stored on Shelby Protocol</p>
+                  <p className="mt-2">Blob ID: <code>{success.blobId}</code></p>
+                  <a href={`https://explorer.shelbynet.shelby.xyz/blob/${encodeURIComponent(success.blobId)}`} target="_blank" rel="noreferrer" className="interactive-control mt-2 inline-flex text-brand">
+                    Verify on Shelby Explorer
+                  </a>
+                </div>
+              ) : null}
               {status ? <p className="mt-4 text-sm text-red-300">{status}</p> : null}
             </div>
           </section>

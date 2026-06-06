@@ -13,6 +13,7 @@ type WalletContextValue = {
   isConnected: boolean;
   isReady: boolean;
   isConnecting: boolean;
+  network: string | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   signAndSubmitTransaction: (payload: unknown) => Promise<{ hash: string }>;
@@ -23,8 +24,11 @@ type WalletContextValue = {
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 function WalletContextBridge({ children }: { children: React.ReactNode }) {
-  const { account, connect, connected, disconnect, isLoading, signAndSubmitTransaction } = useAptosWallet();
+  const walletState = useAptosWallet();
+  const { account, connect, connected, disconnect, isLoading, signAndSubmitTransaction } = walletState;
   const address = normalizeWalletAddress(account?.address?.toString());
+  const networkValue = (walletState as unknown as { network?: { name?: string } | string }).network;
+  const network = typeof networkValue === "string" ? networkValue : networkValue?.name ?? null;
 
   const value = useMemo<WalletContextValue>(() => {
     const getAuthHeaders = (): HeadersInit => (address ? { "x-wallet-address": address } : {});
@@ -41,6 +45,7 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
       isConnected: connected && Boolean(address),
       isReady: true,
       isConnecting: isLoading,
+      network,
       connect: async () => {
         await connect("Petra");
       },
@@ -57,7 +62,7 @@ function WalletContextBridge({ children }: { children: React.ReactNode }) {
       getAuthHeaders,
       walletFetch
     };
-  }, [account, address, connect, connected, disconnect, isLoading, signAndSubmitTransaction]);
+  }, [account, address, connect, connected, disconnect, isLoading, network, signAndSubmitTransaction]);
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }

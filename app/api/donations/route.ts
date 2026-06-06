@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function message(value: unknown) {
-  return typeof value === "string" ? value.trim().slice(0, 140) : "";
+  return typeof value === "string" ? value.trim().slice(0, 280) : "";
 }
 
 export async function POST(request: Request) {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Donations are only available for free creators." }, { status: 400 });
     }
 
-    await verifyShelbyUsdTransfer({
+    const txData = await verifyShelbyUsdTransfer({
       txHash,
       senderWallet: donorWallet,
       recipientWallet: creatorWallet,
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
         creator_wallet: creatorWallet,
         amount,
         message: message(body.message) || null,
-        tx_hash: txHash
+        tx_hash: txHash,
+        block_height: txData?.version ? String(txData.version) : null
       })
       .select("*")
       .single();

@@ -119,6 +119,42 @@ a {
   margin: 0 auto;
 }
 
+.verdact-skeleton {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-surface-2) 76%, var(--color-bg));
+  animation: verdact-skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.network-badge {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.network-badge.active {
+  color: #0f7a62;
+}
+
+.network-badge.wrong-network {
+  color: var(--warning);
+}
+
+@keyframes verdact-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .text-display-xl {
   font-family: var(--font-display);
   font-size: clamp(64px, 8vw, 136px);
@@ -2106,6 +2142,63 @@ select option:checked {
     font-size: clamp(42px, 13vw, 54px) !important;
     overflow-wrap: break-word;
     word-break: normal;
+  }
+
+  .public-nav-shell .container-shell,
+  .vault-topbar .container-shell {
+    width: min(100% - 20px, var(--max));
+    gap: 10px;
+  }
+
+  .public-nav-shell nav > div,
+  .vault-topbar nav > div {
+    gap: 8px;
+  }
+
+  .network-badge {
+    display: none;
+  }
+
+  .market-page h1,
+  .market-page h2,
+  .vault-page h1,
+  .vault-page h2,
+  .app-dashboard h1,
+  .app-dashboard h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .market-hero-title,
+  .font-display.text-7xl {
+    font-size: clamp(46px, 15vw, 64px);
+  }
+
+  .font-display.text-6xl {
+    font-size: clamp(38px, 12vw, 54px);
+  }
+
+  .font-display.text-5xl {
+    font-size: clamp(32px, 10vw, 44px);
+  }
+
+  .market-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fixed.inset-0 .max-w-md,
+  .fixed.inset-0 .max-w-2xl,
+  .fixed.inset-0 .max-w-5xl {
+    max-width: calc(100vw - 24px);
+  }
+
+  .fixed.inset-0 {
+    padding: 12px;
+  }
+
+  video,
+  iframe,
+  img {
+    max-width: 100%;
   }
 }
 

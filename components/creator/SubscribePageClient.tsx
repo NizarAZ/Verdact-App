@@ -7,7 +7,7 @@ import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { BackLink } from "@/components/ui/BackLink";
 import { amountToMicroUnits } from "@/lib/amount";
-import { formatAmount, truncateMiddle } from "@/lib/format";
+import { daysRemaining, formatAmount, truncateMiddle } from "@/lib/format";
 import { createShelbyUsdTransferPayload } from "@/lib/shelby-browser";
 import type { ContentRecord, SubscriptionRecord, VaultRecord } from "@/lib/supabase-server";
 
@@ -21,6 +21,7 @@ export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; p
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [activeSubscription, setActiveSubscription] = useState<SubscriptionRecord | null>(null);
+  const canRenew = activeSubscription ? daysRemaining(activeSubscription.expires_at) <= 7 : false;
 
   useEffect(() => {
     if (!isConnected) {
@@ -42,7 +43,7 @@ export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; p
   }, [isConnected, vault.wallet_address, walletFetch]);
 
   async function subscribe() {
-    if (activeSubscription) return;
+    if (activeSubscription && !canRenew) return;
     setBusy(true);
     setStatus("");
     try {
@@ -102,10 +103,10 @@ export function SubscribePageClient({ vault, previews }: { vault: VaultRecord; p
                   <button
                     type="button"
                     onClick={subscribe}
-                    disabled={busy || Boolean(activeSubscription)}
+                    disabled={busy || (Boolean(activeSubscription) && !canRenew)}
                     className="interactive-control min-h-12 rounded-sm bg-brand px-4 font-mono text-sm text-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {activeSubscription ? "Subscribed" : busy ? "Confirming payment" : `Subscribe for ${formatAmount(vault.price_monthly)} ShelbyUSD/month`}
+                    {busy ? "Confirming payment" : activeSubscription ? canRenew ? `Renew for ${formatAmount(vault.price_monthly)} ShelbyUSD/month` : "Subscribed" : `Subscribe for ${formatAmount(vault.price_monthly)} ShelbyUSD/month`}
                   </button>
                   {activeSubscription ? (
                     <div className="flex min-h-12 items-center justify-center rounded-sm border border-base px-4 text-center font-mono text-xs text-text-secondary">

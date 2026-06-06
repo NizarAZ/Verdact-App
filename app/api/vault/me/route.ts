@@ -31,15 +31,23 @@ export async function GET(request: Request) {
 
     if (!vault) return NextResponse.json({ vault: null });
 
-    const [content, donations] = await Promise.all([
+    const [content, donations, subscriptions] = await Promise.all([
       getContentForVault(vault.id),
       supabase
         .from("donations")
         .select("*")
         .eq("creator_wallet", walletAddress)
         .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("creator_wallet", walletAddress)
+        .order("starts_at", { ascending: false })
         .limit(5)
     ]);
+    if (donations.error) throw donations.error;
+    if (subscriptions.error) throw subscriptions.error;
 
     const contentIds = content.map((item) => item.id);
     const viewsByContent = new Map<string, number>();
@@ -55,6 +63,10 @@ export async function GET(request: Request) {
       vault,
       content: content.map((item) => ({ ...item, view_count: viewsByContent.get(item.id) ?? 0 })),
       donations: donations.data ?? [],
+      supporterActivity: [
+        ...(subscriptions.data ?? []).map((item) => ({ ...item, kind: "subscription", at: item.starts_at })),
+        ...(donations.data ?? []).map((item) => ({ ...item, kind: "donation", at: item.created_at }))
+      ].sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? ""))).slice(0, 5),
       stats: {
         subscribers: vault.subscriber_count ?? 0,
         earnings: Number(vault.total_earnings ?? 0),

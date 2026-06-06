@@ -61,8 +61,9 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="rounded-[var(--radius-md)] border border-base px-3 py-2 font-mono text-xs text-text-secondary">
-          {shorten(address)}
+        <span className="max-w-[220px] rounded-[var(--radius-md)] border border-base px-3 py-2 font-mono text-xs text-text-secondary">
+          <span className="sm:hidden">{shorten(address)}</span>
+          <span className="hidden truncate sm:inline">{compact ? shorten(address) : address}</span>
         </span>
         <button
           type="button"

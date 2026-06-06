@@ -2,21 +2,25 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, Copy, FileText, Gift, LineChart, Plus, Radio, Settings, Share2, Trash2, Upload, Users } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Copy, ExternalLink, FileAudio, FileImage, FileText, FileVideo, Gift, LineChart, Plus, Radio, Settings, Share2, Trash2, Upload, Users } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { ShelbyBlobImage } from "@/components/shared/ShelbyBlobImage";
+import { NetworkBadge } from "@/components/shared/NetworkBadge";
+import { WalletAddress } from "@/components/shared/WalletAddress";
 import { BackLink } from "@/components/ui/BackLink";
 import { StyledSelect } from "@/components/ui/StyledSelect";
 import { acceptedUploadInput, acceptedUploadTypes, categories, maxUploadBytes } from "@/lib/constants";
 import { waitForShelbynetTransaction } from "@/lib/client-chain";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
+import { getShelbyBlobUrl } from "@/lib/shelby-explorer";
 import { createBlobObjectUrl, createClientBlobRegistration, putShelbyBlobWithRetry, readShelbyBlob, waitForShelbyBlobMetadata } from "@/lib/shelby-browser";
 
 type VaultPayload = {
   vault: any | null;
   content?: Array<any>;
   donations?: Array<any>;
+  supporterActivity?: Array<any>;
   stats?: {
     subscribers: number;
     earnings: number;
@@ -34,7 +38,8 @@ function VaultTopbar({ address }: { address?: string | null }) {
           <Link href="/" prefetch={false} className="interactive-control hidden hover:text-text-primary sm:inline">Marketplace</Link>
           <Link href="/vault/upload" className="interactive-control hidden hover:text-text-primary sm:inline">Upload</Link>
           <Link href="/vault/analytics" className="interactive-control hidden hover:text-text-primary sm:inline">Analytics</Link>
-          {address ? <span className="border border-base px-3 py-2">{truncateMiddle(address, 8, 6)}</span> : <WalletButton compact />}
+          <NetworkBadge />
+          {address ? <WalletAddress address={address} start={8} end={6} className="border border-base px-3 py-2" /> : <WalletButton compact />}
         </div>
       </nav>
     </header>
@@ -134,9 +139,17 @@ function EmptyState({ title, body, action, href, icon: Icon = FileText }: { titl
 }
 
 function FileKind({ fileType }: { fileType?: string | null }) {
+  const Icon = fileType?.startsWith("video/")
+    ? FileVideo
+    : fileType?.startsWith("audio/")
+      ? FileAudio
+      : fileType?.startsWith("image/")
+        ? FileImage
+        : FileText;
   const label = fileType?.split("/")[0]?.toUpperCase() || "FILE";
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-base bg-[color:var(--vault-bg)] font-mono text-[10px] text-brand">
+    <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center border border-base bg-[color:var(--vault-bg)] font-mono text-[9px] text-brand">
+      <Icon className="mb-1 h-4 w-4" />
       {label.slice(0, 5)}
     </div>
   );
@@ -270,7 +283,8 @@ function ContentSettingsModal({
   const [thumbnailBlobId, setThumbnailBlobId] = useState(item.thumbnail_blob_id || "");
   const [thumbnailPreview, setThumbnailPreview] = useState("");
   const [allowDownload, setAllowDownload] = useState(item.allow_download !== false);
-  const [isPreview, setIsPreview] = useState(Boolean(item.is_preview));
+  const [visibility, setVisibility] = useState<"preview" | "locked" | "free">(item.is_locked ? "locked" : item.is_preview ? "preview" : "free");
+  const [tags, setTags] = useState(Array.isArray(item.tags) ? item.tags.join(", ") : "");
   const [replacementFile, setReplacementFile] = useState<File | null>(null);
   const [textBody, setTextBody] = useState("");
   const [initialTextBody, setInitialTextBody] = useState("");
@@ -421,7 +435,10 @@ function ContentSettingsModal({
           description,
           thumbnail_blob_id: thumbnailBlobId,
           allow_download: allowDownload,
-          is_preview: isPreview,
+          visibility,
+          is_preview: visibility === "preview" || visibility === "free",
+          is_locked: visibility === "locked",
+          tags: tags.split(",").map((tag: string) => tag.trim()).filter(Boolean),
           ...(replacement ?? {})
         })
       });
@@ -526,9 +543,17 @@ function ContentSettingsModal({
             <span>Allow download</span>
             <input type="checkbox" checked={allowDownload} onChange={(event) => setAllowDownload(event.target.checked)} />
           </label>
-          <label className="vault-fieldset flex items-center justify-between p-4 text-sm text-text-secondary">
-            <span>Show as public preview listing</span>
-            <input type="checkbox" checked={isPreview} onChange={(event) => setIsPreview(event.target.checked)} />
+          <label className="block text-sm text-text-secondary">
+            Visibility
+            <select value={visibility} onChange={(event) => setVisibility(event.target.value as "preview" | "locked" | "free")} className="mt-2 w-full border border-base bg-transparent px-3 py-3 font-mono text-xs text-text-primary outline-none focus:border-brand">
+              <option value="preview">Public Preview</option>
+              <option value="locked">Locked (subscribers only)</option>
+              <option value="free">Free/Public</option>
+            </select>
+          </label>
+          <label className="block text-sm text-text-secondary">
+            Tags
+            <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="art, research, pdf" className="mt-2 w-full border border-base bg-transparent px-3 py-3 text-text-primary outline-none focus:border-brand" />
           </label>
         </div>
 
@@ -565,9 +590,10 @@ export function VaultClient() {
     if (isConnected) void load();
   }, [isConnected]);
 
-  async function removeContent(id: string) {
+  async function removeContent(item: any) {
     setContentStatus("");
-    const response = await walletFetch(`/api/content/${id}`, { method: "DELETE" });
+    if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+    const response = await walletFetch(`/api/content/${item.id}`, { method: "DELETE" });
     const json = await response.json().catch(() => ({}));
     if (!response.ok) {
       setContentStatus(json.error || "Failed to delete content listing.");
@@ -580,6 +606,7 @@ export function VaultClient() {
   const stats = payload?.stats ?? { subscribers: 0, earnings: 0, contentItems: 0, views: 0 };
   const content = payload?.content ?? [];
   const donations = payload?.donations ?? [];
+  const supporterActivity = payload?.supporterActivity ?? [];
   const vault = payload?.vault;
   const latestContent = content.slice(0, 6);
   const previewCount = useMemo(() => content.filter((item) => item.is_preview).length, [content]);
@@ -615,7 +642,9 @@ export function VaultClient() {
 
   function copyStorefront() {
     const url = `${window.location.origin}/creator/${vault.wallet_address}`;
-    void navigator.clipboard.writeText(url);
+    const shareText = `Check out ${vault.display_name} on Verdact - ${(vault.bio || "").slice(0, 80)}${vault.bio && vault.bio.length > 80 ? "..." : ""}
+${vault.is_paid ? `Subscribe from ${formatAmount(vault.price_monthly)} ShelbyUSD/month` : "Support with ShelbyUSD"}: ${url}`;
+    void navigator.clipboard.writeText(shareText);
     setCopied("storefront");
     window.setTimeout(() => setCopied(""), 1400);
   }
@@ -708,6 +737,13 @@ export function VaultClient() {
           </div>
         </section>
 
+        {Boolean(vault.display_name) && Boolean(vault.bio && vault.bio.length > 20) && previewCount > 0 && (vault.is_paid ? Number(vault.price_monthly) > 0 : true) && content.length > 0 ? (
+          <div className="storefront-live-banner mt-6 border border-base bg-[color:var(--vault-panel)] p-4 font-mono text-sm text-text-secondary">
+            <span className="text-brand">Your storefront is live.</span>{" "}
+            <a href={`/creator/${vault.wallet_address}`} target="_blank" rel="noreferrer" className="interactive-control text-brand">View it</a>
+          </div>
+        ) : null}
+
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
           <section className="vault-panel p-5">
             <div className="mb-5 flex items-end justify-between gap-4">
@@ -754,6 +790,11 @@ export function VaultClient() {
                     <p className="mt-3 max-w-full overflow-hidden truncate font-mono text-xs text-text-tertiary" title={item.file_name || item.file_type || "file"}>
                       {item.view_count ?? 0} views / {item.file_name || item.file_type || "file"}
                     </p>
+                    {item.blob_id ? (
+                      <a href={getShelbyBlobUrl(item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control mt-3 inline-flex items-center gap-2 font-mono text-xs text-brand">
+                        Blob ID: {truncateMiddle(item.blob_id, 10, 8)} <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
                     <div className="mt-auto flex flex-wrap gap-2 pt-8">
                       <button type="button" onClick={() => setViewerItem(item)} className="interactive-control inline-flex min-h-10 flex-1 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary hover:text-text-primary">
                         Open
@@ -761,7 +802,7 @@ export function VaultClient() {
                       <button type="button" onClick={() => setSettingsItem(item)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="File settings">
                         <Settings className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => removeContent(item.id)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="Delete content">
+                      <button type="button" onClick={() => removeContent(item)} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base text-text-tertiary hover:text-text-primary" aria-label="Delete content">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -775,20 +816,20 @@ export function VaultClient() {
             <section className="vault-panel p-5">
               <h2 className="font-display text-4xl leading-none">Supporter feed</h2>
               <div className="mt-5 grid gap-3">
-                {donations.length === 0 ? (
+                {supporterActivity.length === 0 ? (
                   <div className="vault-empty min-h-[260px] p-5">
                     <Gift className="h-6 w-6 text-brand" />
                     <p className="mt-12 max-w-xs font-display text-3xl leading-none">No supporter notes yet.</p>
                     <p className="mt-3 max-w-sm text-sm leading-6 text-text-tertiary">Free storefront donations and paid supporter messages will collect here once the public page is active.</p>
                   </div>
-                ) : donations.map((donation) => (
-                  <div key={donation.id} className="vault-activity-row p-3">
+                ) : supporterActivity.map((event) => (
+                  <div key={`${event.kind}-${event.id}`} className="vault-activity-row p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-mono text-xs text-text-secondary">{truncateMiddle(donation.donor_wallet)}</p>
-                      <p className="font-mono text-xs text-brand">{formatAmount(donation.amount)} ShelbyUSD</p>
+                      <p className="font-mono text-xs text-text-secondary">{truncateMiddle(event.kind === "subscription" ? event.subscriber_wallet : event.donor_wallet)}</p>
+                      <p className="font-mono text-xs text-brand">{formatAmount(event.kind === "subscription" ? event.amount_paid : event.amount)} ShelbyUSD</p>
                     </div>
-                    {donation.message ? <p className="mt-2 text-sm text-text-tertiary">{donation.message}</p> : null}
-                    <p className="mt-2 font-mono text-[10px] text-text-tertiary">{formatDate(donation.created_at)}</p>
+                    {event.kind === "donation" && event.message ? <blockquote className="mt-2 border-l-2 border-base pl-3 text-sm text-text-tertiary">"{event.message}"</blockquote> : null}
+                    <p className="mt-2 font-mono text-[10px] text-text-tertiary">{event.kind === "subscription" ? "subscription" : "donation"} / {formatDate(event.at)}</p>
                   </div>
                 ))}
               </div>
@@ -798,14 +839,18 @@ export function VaultClient() {
               <h2 className="font-display text-4xl leading-none">Storefront checklist</h2>
               <div className="mt-5 grid gap-2 font-mono text-xs text-text-tertiary">
                 {[
-                  ["Profile named", Boolean(vault.display_name)],
-                  ["Bio written", Boolean(vault.bio)],
-                  ["Preview uploaded", previewCount > 0],
-                  ["Pricing decided", vault.is_paid ? Number(vault.price_monthly) > 0 : true]
-                ].map(([label, done]) => (
-                  <div key={String(label)} className="flex items-center justify-between border border-base px-3 py-2">
-                    <span>{label}</span>
-                    <span className={done ? "text-brand" : "text-text-tertiary"}>{done ? "ready" : "open"}</span>
+                  ["Profile named", Boolean(vault.display_name), "Add a display name in settings."],
+                  ["Bio written", Boolean(vault.bio && vault.bio.length > 20), "Write at least a short storefront bio in settings."],
+                  ["Preview uploaded", previewCount > 0, "Upload a file and set it to Public Preview."],
+                  ["Pricing decided", vault.is_paid ? Number(vault.price_monthly) > 0 : true, "Set a monthly price or switch to a free storefront."],
+                  ["First file uploaded", content.length > 0, "Publish your first Shelby-backed file."]
+                ].map(([label, done, hint]) => (
+                  <div key={String(label)} className="border border-base px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <span>{label}</span>
+                      <span className={done ? "text-brand" : "text-text-tertiary"}>{done ? "ready" : "open"}</span>
+                    </div>
+                    {!done ? <p className="mt-2 text-[11px] leading-5 text-text-tertiary">{hint} {label === "Preview uploaded" || label === "First file uploaded" ? <Link href="/vault/upload" className="text-brand">Upload now</Link> : <Link href="/vault/settings" className="text-brand">Open settings</Link>}</p> : null}
                   </div>
                 ))}
               </div>

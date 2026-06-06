@@ -1,7 +1,13 @@
-export function getShelbyAccountBlobsUrl(accountAddress: string) {
-  return `https://explorer.shelby.xyz/shelbynet/account/${encodeURIComponent(accountAddress)}/blobs`;
+const shelbyExplorerBase = "https://explorer.shelbynet.shelby.xyz";
+
+export function getShelbyTxnUrl(txHash?: string | null) {
+  return txHash ? `${shelbyExplorerBase}/txn/${encodeURIComponent(txHash)}` : "";
 }
 
-export function getShelbyBlobUrl(accountAddress: string, blobName: string) {
-  return `https://explorer.shelby.xyz/shelbynet/account/${encodeURIComponent(accountAddress)}/blob/${encodeURIComponent(blobName)}`;
+export function getShelbyBlobUrl(blobName?: string | null) {
+  return blobName ? `${shelbyExplorerBase}/blob/${encodeURIComponent(blobName)}` : "";
+}
+
+export function getShelbyAccountBlobsUrl(accountAddress: string) {
+  return `${shelbyExplorerBase}/account/${encodeURIComponent(accountAddress)}/blobs`;
 }

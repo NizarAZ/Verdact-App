@@ -42,17 +42,20 @@ export async function POST(request: Request) {
 
     const activeSubscription = await getActiveSubscription(subscriberWallet, creatorWallet);
     if (activeSubscription) {
-      return NextResponse.json(
-        {
-          error: "Subscription is already active.",
-          subscription: activeSubscription
-        },
-        { status: 409 }
-      );
+      const msLeft = new Date(activeSubscription.expires_at).getTime() - Date.now();
+      if (msLeft > 7 * 86_400_000) {
+        return NextResponse.json(
+          {
+            error: "Subscription is already active.",
+            subscription: activeSubscription
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const amountMicroUnits = amountToMicroUnits(vault.price_monthly);
-    await verifyShelbyUsdTransfer({
+    const txData = await verifyShelbyUsdTransfer({
       txHash,
       senderWallet: subscriberWallet,
       recipientWallet: creatorWallet,
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     if (existing.data) return NextResponse.json({ error: "Subscription transaction already recorded." }, { status: 400 });
     if (existing.error) throw existing.error;
 
-    const startsAt = new Date();
+    const startsAt = activeSubscription ? new Date(activeSubscription.expires_at) : new Date();
     const expiresAt = new Date(startsAt.getTime() + 30 * 86_400_000);
     const amount = Number(vault.price_monthly);
     const { data, error } = await supabase
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
         subscriber_wallet: subscriberWallet,
         creator_wallet: creatorWallet,
         tx_hash: txHash,
+        block_height: txData?.version ? String(txData.version) : null,
         amount_paid: amount,
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString()

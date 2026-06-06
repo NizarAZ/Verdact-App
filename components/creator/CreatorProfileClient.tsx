@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Download, FileText, Heart, Image as ImageIcon, Lock, Play, X } from "lucide-react";
+import { ArrowUpRight, Download, FileText, Heart, Image as ImageIcon, Lock, Music, Play, ShieldCheck, X } from "lucide-react";
 import { useWallet } from "@/components/WalletProvider";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { PublicNav } from "@/components/marketplace/PublicNav";
@@ -11,6 +11,8 @@ import { BackLink } from "@/components/ui/BackLink";
 import { createBlobObjectUrl, createShelbyUsdTransferPayload, readShelbyBlob } from "@/lib/shelby-browser";
 import { amountToMicroUnits } from "@/lib/amount";
 import { formatAmount, formatDate, truncateMiddle } from "@/lib/format";
+import { getShelbyBlobUrl } from "@/lib/shelby-explorer";
+import { WalletAddress } from "@/components/shared/WalletAddress";
 import type { ContentRecord, SubscriptionRecord, VaultRecord } from "@/lib/supabase-server";
 
 type CreatorState = {
@@ -21,12 +23,15 @@ type CreatorState = {
   isFavourite: boolean;
   supporterCount: number;
   subscription?: SubscriptionRecord | null;
+  expiredSubscription?: SubscriptionRecord | null;
+  paymentsVerified?: boolean;
 };
 
-const donationPresets = [0.1, 0.5, 1, 5];
+const donationPresets = [0.01, 0.05, 0.1, 0.5, 1];
 
 function contentIcon(fileType?: string | null) {
   if (fileType?.startsWith("video/")) return Play;
+  if (fileType?.startsWith("audio/")) return Music;
   if (fileType?.startsWith("image/")) return ImageIcon;
   return FileText;
 }
@@ -36,9 +41,11 @@ function canViewContent(state: CreatorState, item: ContentRecord) {
 }
 
 function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void }) {
+  const { walletFetch } = useWallet();
   const [url, setUrl] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let currentUrl: string | null = null;
@@ -54,7 +61,7 @@ function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void })
           setText(new TextDecoder().decode(bytes));
         }
         setUrl(currentUrl);
-        await fetch(`/api/content/${item.id}/view`, { method: "POST" }).catch(() => undefined);
+        await walletFetch(`/api/content/${item.id}/view`, { method: "POST" }).catch(() => undefined);
       } catch (loadError) {
         if (mounted) setError(loadError instanceof Error ? loadError.message : "Unable to load content.");
       }
@@ -65,7 +72,7 @@ function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void })
       mounted = false;
       if (currentUrl) URL.revokeObjectURL(currentUrl);
     };
-  }, [item]);
+  }, [item, retry, walletFetch]);
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/80 p-4 backdrop-blur-sm">
@@ -80,12 +87,22 @@ function Viewer({ item, onClose }: { item: ContentRecord; onClose: () => void })
           </button>
         </div>
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
-          {error ? <p className="text-sm text-red-300">{error}</p> : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
+          {error ? (
+            <div className="blob-error max-w-md border border-base p-5 text-center">
+              <p className="font-display text-3xl leading-none">Content temporarily unavailable.</p>
+              <p className="mt-3 text-sm leading-6 text-text-tertiary">The file may still be propagating on Shelby.</p>
+              <p className="mt-3 font-mono text-xs text-brand">{error}</p>
+              <button type="button" onClick={() => { setError(""); setUrl(null); setText(null); setRetry((value) => value + 1); }} className="interactive-control mt-4 border border-base px-4 py-2 font-mono text-xs">
+                Retry
+              </button>
+            </div>
+          ) : !url ? <p className="font-mono text-sm text-text-tertiary">Loading from Shelby</p> : null}
           {url && item.file_type?.startsWith("video/") ? <video src={url} controls className="max-h-full w-full" /> : null}
+          {url && item.file_type?.startsWith("audio/") ? <audio src={url} controls className="w-full" /> : null}
           {url && item.file_type?.startsWith("image/") ? <img src={url} alt={item.title} className="max-h-full max-w-full" /> : null}
           {url && item.file_type === "application/pdf" ? <iframe src={url} title={item.title} className="h-full min-h-[70vh] w-full" /> : null}
           {url && text ? <pre className="w-full whitespace-pre-wrap font-mono text-sm leading-6 text-text-primary">{text}</pre> : null}
-          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
+          {url && !text && !item.file_type?.startsWith("video/") && !item.file_type?.startsWith("audio/") && !item.file_type?.startsWith("image/") && item.file_type !== "application/pdf" ? (
             <a href={url} download={item.file_name || item.title} className="interactive-control rounded-sm bg-brand px-4 py-3 font-mono text-sm text-brand-dark">
               Open file
             </a>
@@ -144,10 +161,10 @@ function DonationModal({ state, onClose }: { state: CreatorState; onClose: () =>
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-6 grid grid-cols-4 gap-2">
+        <div className="mt-6 grid grid-cols-3 gap-2 sm:grid-cols-5">
           {donationPresets.map((preset) => (
-            <button key={preset} type="button" onClick={() => setAmount(String(preset))} className="interactive-control rounded-sm border border-base px-3 py-2 font-mono text-sm">
-              {preset}
+            <button key={preset} type="button" onClick={() => setAmount(String(preset))} className={`interactive-control rounded-sm border px-3 py-2 font-mono text-sm ${amount === String(preset) ? "border-brand text-brand" : "border-base"}`}>
+              {preset} ShelbyUSD
             </button>
           ))}
         </div>
@@ -156,8 +173,8 @@ function DonationModal({ state, onClose }: { state: CreatorState; onClose: () =>
           <input value={amount} onChange={(event) => setAmount(event.target.value)} className="mt-2 w-full rounded-sm border border-base bg-transparent px-3 py-3 font-mono outline-none focus:border-brand" />
         </label>
         <label className="mt-4 block text-sm">
-          <span className="text-text-secondary">Message</span>
-          <textarea value={message} maxLength={140} onChange={(event) => setMessage(event.target.value)} className="mt-2 min-h-24 w-full rounded-sm border border-base bg-transparent px-3 py-3 outline-none focus:border-brand" />
+          <span className="text-text-secondary">Leave a note for the creator (optional)</span>
+          <textarea value={message} maxLength={280} onChange={(event) => setMessage(event.target.value)} className="mt-2 min-h-24 w-full rounded-sm border border-base bg-transparent px-3 py-3 outline-none focus:border-brand" />
         </label>
         <div className="mt-5">
           {isConnected ? (
@@ -315,11 +332,12 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
                     <Heart className={`h-4 w-4 ${state.isFavourite ? "fill-[color:var(--color-pink)] text-[color:var(--color-pink)]" : ""}`} />
                   </button>
                 </div>
-                <p className="mt-2 font-mono text-xs text-text-tertiary">{truncateMiddle(state.vault.wallet_address, 12, 8)}</p>
+                <WalletAddress address={state.vault.wallet_address} start={12} end={8} className="mt-2 text-text-tertiary" />
                 <p className="mt-4 max-w-2xl text-text-secondary">{state.vault.bio || "No bio yet."}</p>
                 <div className="mt-5 flex flex-wrap gap-2 font-mono text-xs">
                   <span className="rounded-sm border border-base px-2 py-1">{state.vault.category || "Other"}</span>
                   <span className="rounded-sm border border-base px-2 py-1">{state.vault.is_paid ? `${formatAmount(state.vault.price_monthly)} ShelbyUSD/month` : "FREE"}</span>
+                  {state.paymentsVerified ? <span className="inline-flex items-center gap-1 rounded-sm border border-base px-2 py-1 text-brand"><ShieldCheck className="h-3.5 w-3.5" /> Payments verified on Shelbynet</span> : null}
                   {state.vault.show_donation_total && !state.vault.is_paid ? <span className="rounded-sm border border-base px-2 py-1">{state.supporterCount} supporters</span> : null}
                 </div>
               </div>
@@ -350,6 +368,14 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
             )}
           </div>
           {notice ? <p className="mt-5 font-mono text-xs text-text-tertiary">{notice}</p> : null}
+          {state.expiredSubscription ? (
+            <div className="mt-5 border border-base bg-[color:var(--market-surface-strong)] p-4">
+              <p className="font-display text-3xl leading-none">Your subscription expired. Renew to access locked content.</p>
+              <Link href={`/subscribe/${state.vault.wallet_address}`} className="interactive-control mt-3 inline-flex min-h-10 items-center bg-brand px-4 font-mono text-xs text-brand-dark">
+                Renew
+              </Link>
+            </div>
+          ) : null}
           <div className="mt-6 grid border border-base md:grid-cols-4">
             {[
               ["files", publicContent.length],
@@ -432,6 +458,11 @@ export function CreatorProfileClient({ initialState }: { initialState: CreatorSt
                       <button type="button" onClick={() => downloadContent(item)} disabled={downloadingId === item.id} className="interactive-control inline-flex h-10 w-10 items-center justify-center border border-base disabled:cursor-wait disabled:opacity-60" aria-label="Download">
                         <Download className="h-4 w-4" />
                       </button>
+                    ) : null}
+                    {state.isOwner && item.blob_id ? (
+                      <a href={getShelbyBlobUrl(item.blob_id)} target="_blank" rel="noreferrer" className="interactive-control inline-flex min-h-10 items-center justify-center border border-base px-3 font-mono text-xs text-text-tertiary">
+                        View on Shelby
+                      </a>
                     ) : null}
                   </div>
                 </div>

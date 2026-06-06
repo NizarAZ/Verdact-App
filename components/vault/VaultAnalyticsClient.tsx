@@ -31,6 +31,11 @@ function hasValues(items?: ChartDatum[], key: "value" | "views" = "value") {
   return Boolean(items?.some((item) => Number(item[key] ?? 0) > 0));
 }
 
+function formatChartDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+}
+
 function AnalyticsEmpty({ title, body, actionHref, action }: { title: string; body: string; actionHref: string; action: string }) {
   return (
     <div className="vault-chart-empty p-6 text-center">
@@ -167,7 +172,7 @@ export function VaultAnalyticsClient() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={chartStroke} vertical={false} />
-              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} />
+              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} tickFormatter={formatChartDate} minTickGap={18} />
               <YAxis stroke={mutedStroke} tickLine={false} tick={axisTick} width={44} />
               <Tooltip contentStyle={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }} />
               <Area type="monotone" dataKey="value" stroke="var(--color-pink)" fill="url(#earningsFill)" strokeWidth={2} />
@@ -177,7 +182,7 @@ export function VaultAnalyticsClient() {
           <ChartPanel title="Subscriber starts" note="New subscriptions grouped by start date." hasData={hasValues(data.subscribersOverTime)}>
             <LineChart data={data.subscribersOverTime ?? []} margin={{ top: 10, right: 10, bottom: 4, left: 0 }}>
               <CartesianGrid stroke={chartStroke} vertical={false} />
-              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} />
+              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} tickFormatter={formatChartDate} minTickGap={18} />
               <YAxis stroke={mutedStroke} tickLine={false} tick={axisTick} width={34} allowDecimals={false} />
               <Tooltip contentStyle={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }} />
               <Line type="monotone" dataKey="value" stroke="var(--color-teal)" strokeWidth={2} dot={{ r: 3, fill: "var(--color-teal)" }} />
@@ -205,11 +210,37 @@ export function VaultAnalyticsClient() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={chartStroke} vertical={false} />
-              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} />
+              <XAxis dataKey="date" stroke={mutedStroke} tickLine={false} tick={axisTick} tickFormatter={formatChartDate} minTickGap={18} />
               <YAxis stroke={mutedStroke} tickLine={false} tick={axisTick} width={34} allowDecimals={false} />
               <Tooltip contentStyle={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }} />
               <Area type="monotone" dataKey="value" stroke="var(--color-teal)" fill="url(#viewsFill)" strokeWidth={2} />
             </AreaChart>
+          </ChartPanel>
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <section className="vault-panel p-5">
+            <h2 className="font-display text-4xl leading-none">Subscriber retention</h2>
+            <div className="mt-5 grid grid-cols-2 border border-base">
+              <div className="border-r border-base p-4">
+                <p className="font-display text-5xl leading-none text-brand">{data.subscriberRetention?.active ?? 0}</p>
+                <p className="mt-2 font-mono text-xs text-text-tertiary">active</p>
+              </div>
+              <div className="p-4">
+                <p className="font-display text-5xl leading-none">{data.subscriberRetention?.churned ?? 0}</p>
+                <p className="mt-2 font-mono text-xs text-text-tertiary">expired</p>
+              </div>
+            </div>
+          </section>
+
+          <ChartPanel title="Top file types" note="Published content grouped by MIME family." hasData={Boolean((data.fileTypeBreakdown ?? []).length)}>
+            <BarChart data={data.fileTypeBreakdown ?? []} layout="vertical" margin={{ top: 10, right: 10, bottom: 4, left: 10 }}>
+              <CartesianGrid stroke={chartStroke} horizontal={false} />
+              <XAxis type="number" stroke={mutedStroke} tickLine={false} tick={axisTick} allowDecimals={false} />
+              <YAxis dataKey="type" type="category" stroke={mutedStroke} tickLine={false} tick={axisTick} width={80} />
+              <Tooltip contentStyle={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }} />
+              <Bar dataKey="count" fill="var(--color-pink)" radius={[0, 0, 0, 0]} />
+            </BarChart>
           </ChartPanel>
         </div>
 

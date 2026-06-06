@@ -9,19 +9,29 @@ function text(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function cleanTags(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((tag) => text(tag, 40)).filter(Boolean).slice(0, 12);
+}
+
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   try {
     const walletAddress = getWalletAddress(request);
     const body = await request.json().catch(() => ({}));
     const title = text(body.title, 120);
     if (!title) return NextResponse.json({ error: "Title is required." }, { status: 400 });
+    const visibility = text(body.visibility, 40);
+    const isPreview = visibility === "preview" || Boolean(body.is_preview);
+    const isLocked = visibility === "locked" || Boolean(body.is_locked);
 
     const patch: Record<string, unknown> = {
       title,
       description: text(body.description, 1000) || null,
       thumbnail_blob_id: text(body.thumbnail_blob_id, 300) || null,
       allow_download: body.allow_download !== false,
-      is_preview: Boolean(body.is_preview)
+      is_preview: isPreview,
+      is_locked: isLocked && !isPreview,
+      tags: cleanTags(body.tags)
     };
 
     const replacementBlobId = text(body.blob_id, 300);

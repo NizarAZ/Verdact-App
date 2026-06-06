@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS content (
   thumbnail_blob_id TEXT,
   allow_download BOOLEAN DEFAULT true,
   is_preview BOOLEAN DEFAULT false,
+  is_locked BOOLEAN DEFAULT false,
+  tags TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT now()
 );
 
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   subscriber_wallet TEXT NOT NULL,
   creator_wallet TEXT NOT NULL,
   tx_hash TEXT NOT NULL,
+  block_height TEXT,
   amount_paid NUMERIC,
   starts_at TIMESTAMP DEFAULT now(),
   expires_at TIMESTAMP NOT NULL
@@ -54,6 +57,7 @@ CREATE TABLE IF NOT EXISTS donations (
   amount NUMERIC NOT NULL,
   message TEXT,
   tx_hash TEXT NOT NULL,
+  block_height TEXT,
   created_at TIMESTAMP DEFAULT now()
 );
 

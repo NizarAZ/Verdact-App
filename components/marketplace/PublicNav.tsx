@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ShelbyLogo } from "@/components/shelby-logo";
 import { WalletButton } from "@/components/wallet/WalletButton";
+import { NetworkBadge } from "@/components/shared/NetworkBadge";
 
 export function PublicNav() {
   return (
@@ -22,6 +23,7 @@ export function PublicNav() {
           <Link href="/vault" className="interactive-control hidden font-mono text-sm text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] sm:inline">
             Creator vault
           </Link>
+          <NetworkBadge />
           <WalletButton compact />
         </div>
       </nav>
