@@ -76,6 +76,7 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
   const initials = (creator.display_name || creator.wallet_address || "V").slice(0, 1);
   const latestPreview = creator.latest_preview_content[0];
   const hasPreviews = creator.latest_preview_content.length > 0;
+  const previewThumbnail = creator.latest_preview_content.find((item) => item.thumbnail_blob_id)?.thumbnail_blob_id;
 
   return (
     <Link
@@ -84,17 +85,17 @@ function MarketplaceCard({ creator, featured = false }: { creator: CreatorCard; 
       className={`market-card group block overflow-hidden ${featured ? "min-h-[560px]" : ""}`}
     >
       <div className={`${featured ? "h-[300px]" : "h-[210px]"} relative border-b border-[color:var(--market-border)] bg-[color:var(--market-surface-strong)]`}>
-        {creator.cover_blob_id ? (
+        {creator.cover_blob_id || previewThumbnail ? (
           <ShelbyBlobImage
             walletAddress={creator.wallet_address}
-            blobId={creator.cover_blob_id}
+            blobId={creator.cover_blob_id || previewThumbnail}
             alt=""
             className="absolute inset-0 h-full w-full object-cover opacity-85 transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:32px_32px]" />
         )}
-        {!creator.cover_blob_id ? (
+        {!creator.cover_blob_id && !previewThumbnail ? (
           <div className="absolute inset-4 overflow-hidden border border-[color:var(--market-border)] bg-[color:var(--market-bg)]">
             <div className="pointer-events-none absolute inset-0 opacity-80 transition-transform duration-500 group-hover:scale-105">
               <div className="absolute left-5 top-5 h-20 w-[58%] border border-[color:var(--market-line)] bg-[linear-gradient(135deg,var(--market-bg),var(--market-surface))]" />
@@ -216,6 +217,16 @@ function LatestDropCard({ creator, item, index }: { creator: CreatorCard; item: 
     <Link href={`/creator/${creator.wallet_address}`} data-reveal className="market-card grid min-h-[220px] overflow-hidden md:grid-cols-[0.7fr_1fr]">
       <div className="relative border-b border-[color:var(--market-border)] bg-[color:var(--market-surface-strong)] md:border-b-0 md:border-r">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(var(--market-grid)_1px,transparent_1px),linear-gradient(90deg,var(--market-grid)_1px,transparent_1px)] bg-[length:26px_26px]" />
+        {item.thumbnail_blob_id ? (
+          <ShelbyBlobImage
+            walletAddress={item.wallet_address || creator.wallet_address}
+            blobId={item.thumbnail_blob_id}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+            fallback={null}
+          />
+        ) : null}
+        {item.thumbnail_blob_id ? <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_52%,rgba(23,18,13,0.22))]" /> : null}
         <div className="pointer-events-none absolute left-5 top-5 font-display text-6xl leading-none text-[color:var(--market-muted)]">{String(index + 1).padStart(2, "0")}</div>
         <div className="pointer-events-none absolute bottom-5 right-5 flex h-11 w-11 items-center justify-center border border-[color:var(--market-border)] bg-[color:var(--market-bg)]">
           <PreviewIcon type={item.file_type} />
@@ -229,6 +240,7 @@ function LatestDropCard({ creator, item, index }: { creator: CreatorCard; item: 
         </div>
         <p className="mt-9 font-display text-4xl leading-none text-[color:var(--market-text)]">{item.title}</p>
         <p className="mt-3 font-mono text-xs text-[color:var(--market-muted)]">{creator.display_name || truncateMiddle(creator.wallet_address)}</p>
+        {item.description ? <p className="mt-3 line-clamp-2 text-sm leading-5 text-[color:var(--market-muted)]">{item.description}</p> : null}
       </div>
     </Link>
   );

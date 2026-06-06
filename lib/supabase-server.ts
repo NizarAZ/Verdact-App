@@ -64,7 +64,7 @@ export type SubscriptionRecord = {
 export type CreatorCard = VaultRecord & {
   content_count: number;
   preview_count: number;
-  latest_preview_content: Pick<ContentRecord, "id" | "title" | "file_type" | "is_preview" | "created_at">[];
+  latest_preview_content: Pick<ContentRecord, "id" | "wallet_address" | "title" | "description" | "file_type" | "thumbnail_blob_id" | "is_preview" | "created_at">[];
 };
 
 export type CategoryStat = {
@@ -138,7 +138,7 @@ export async function listCreators(params: {
   if (ids.length > 0) {
     const { data: content, error: contentError } = await supabase
       .from("content")
-      .select("id,vault_id,title,file_type,is_preview,created_at")
+      .select("id,vault_id,wallet_address,title,description,file_type,thumbnail_blob_id,is_preview,created_at")
       .in("vault_id", ids)
       .order("created_at", { ascending: false });
     if (contentError) throw contentError;
@@ -150,8 +150,11 @@ export async function listCreators(params: {
         if (previews.length < 3) {
           previews.push({
             id: item.id,
+            wallet_address: item.wallet_address,
             title: item.title,
+            description: item.description,
             file_type: item.file_type,
+            thumbnail_blob_id: item.thumbnail_blob_id,
             is_preview: item.is_preview,
             created_at: item.created_at
           });
