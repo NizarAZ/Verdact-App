@@ -512,7 +512,7 @@ export function MarketplaceExperience({ creators, latestDropCreators, categorySt
 
       <section className="container-shell grid gap-6 py-14 lg:grid-cols-[0.8fr_1.2fr]" data-pattern="feed-board">
         <div className="market-panel p-6">
-          <h2 className="font-display text-6xl leading-none text-[color:var(--market-text)]">Storefront feed</h2>
+          <h2 className="font-display text-6xl leading-none text-[color:var(--market-text)]">Content feed</h2>
           <p className="mt-5 max-w-md text-sm leading-6 text-[color:var(--market-muted)]">
             A tighter pulse of what is live: creators, latest previews, access cues, and open category lanes when the marketplace is still early.
           </p>
@@ -574,7 +574,7 @@ export function MarketplaceExperience({ creators, latestDropCreators, categorySt
 
       <section id="creator-grid" className="container-shell py-16" data-pattern="batch-reveal">
         <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-          <h2 className="max-w-3xl font-display text-7xl leading-none text-[color:var(--market-text)]">Open storefronts</h2>
+          <h2 className="max-w-3xl font-display text-7xl leading-none text-[color:var(--market-text)]">New creators</h2>
           <p className="max-w-md text-sm leading-6 text-[color:var(--market-muted)]">
             Creator cards expose enough context to browse without a wallet: access type, category, preview activity, and the creator address.
           </p>
