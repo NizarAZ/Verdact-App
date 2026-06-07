@@ -35,9 +35,9 @@ Verdact solves this by combining:
 
 ---
 
-# Core Concept
+## Core Concept
 
-Create a vault -> upload content -> store on Shelby -> publish a storefront -> get paid directly.
+Create a vault → upload content → store on Shelby → publish a storefront → get paid directly.
 
 ```txt
 Creator
@@ -68,13 +68,13 @@ Creator Vault
 
 ---
 
-# Features
+## Features
 
 ### Public Creator Marketplace
 
 Verdact opens as a marketplace first.
 
-Anyone can browse creator storefronts, discover public preview content, view creator profiles, and explore free or paid vaults without connecting a wallet.
+Anyone can browse creator storefronts, discover public preview content, view creator profiles, and explore free or paid vaults without connecting a wallet. The homepage surfaces real-time latest public drops and category lanes with live creator and file counts.
 
 ---
 
@@ -91,7 +91,19 @@ Creators can set up a vault with:
 - Monthly ShelbyUSD price
 - Donation visibility settings
 
-The vault dashboard gives creators a publishing workspace for content, activity, and analytics.
+The vault dashboard gives creators a publishing workspace with content queue, supporter feed, storefront checklist, and quick-access actions.
+
+---
+
+### Content Visibility System
+
+Every file a creator uploads has one of three visibility states:
+
+- **Public Preview** — visible to anyone browsing the marketplace without a wallet
+- **Locked** — gated behind an active ShelbyUSD subscription; displayed as a blurred card with a subscribe CTA
+- **Free** — publicly accessible with donations enabled
+
+Creators set visibility during upload and can change it at any time from file settings.
 
 ---
 
@@ -99,24 +111,32 @@ The vault dashboard gives creators a publishing workspace for content, activity,
 
 Creator content is stored as Shelby blobs instead of platform-owned media files.
 
-Supported content types include:
+Supported content types:
 
-- MP4
-- MOV
-- MP3
-- WAV
-- JPG
-- PNG
-- GIF
+- MP4, MOV
+- MP3, WAV
+- JPG, PNG, GIF
 - PDF
-- TXT
-- Markdown
-- DOCX
-- PPTX
-- CSV
-- JSON
+- TXT, Markdown
+- DOCX, PPTX
+- CSV, JSON
 
-Files are fetched client-side from Shelby and rendered as local object URLs.
+Files are fetched client-side from Shelby and rendered as local object URLs. Each published file displays its Shelby blob ID with a direct link to Shelby Explorer.
+
+---
+
+### Content Viewer
+
+Files open in a native viewer matched to their type:
+
+- **PDF** — rendered in a full-height iframe
+- **Video** — HTML5 video player with controls
+- **Audio** — HTML5 audio player
+- **Images** — inline display
+- **Text / Markdown** — readable pre-formatted block
+- **Other** — direct download fallback
+
+Shelby fetch errors surface a retry option rather than a silent blank screen.
 
 ---
 
@@ -124,10 +144,8 @@ Files are fetched client-side from Shelby and rendered as local object URLs.
 
 Verdact supports two creator models:
 
-- **Free creators** publish public content and accept donations.
-- **Paid creators** lock content behind a monthly ShelbyUSD subscription.
-
-Paid content appears as marketplace listings, but the actual Shelby blob is only fetched after an active subscription check passes.
+- **Free creators** publish public content and accept ShelbyUSD donations with preset amounts and a 280-character supporter note.
+- **Paid creators** lock content behind a monthly ShelbyUSD subscription. The actual Shelby blob is only fetched after an active, non-expired subscription check passes server-side.
 
 ---
 
@@ -142,8 +160,30 @@ Verdact verifies each Shelbynet transaction before writing anything to Supabase:
 - Recipient matches the creator wallet
 - Amount matches the expected ShelbyUSD value
 - Asset matches ShelbyUSD
+- Block height recorded for audit
 
 No platform cut. No custodial payment layer.
+
+---
+
+### Payment Trust & Verification
+
+Every payment is on-chain verifiable:
+
+- Shelby Explorer link attached to every subscription and donation
+- Downloadable JSON receipt per transaction (includes tx_hash, block_height, from, to, amount, asset, verified_at)
+- "Payments verified on Shelbynet" badge shown on storefronts once a creator has received a transaction
+- Wallet addresses are copyable with one click throughout the UI
+- Network indicator in the navbar confirms Shelbynet connection
+
+---
+
+### Subscription Renewal & Expiry
+
+- Subscription expiry is enforced server-side — expired subscriptions cannot access locked blobs
+- Subscriptions expiring within 7 days show a renewal warning on the supporter profile
+- A Renew button links directly to the subscription checkout
+- Storefronts show a targeted message to visitors with lapsed subscriptions
 
 ---
 
@@ -151,19 +191,43 @@ No platform cut. No custodial payment layer.
 
 Creators can track:
 
-- Earnings
-- Active subscribers
-- Content views
-- Viewed files
-- Subscriber activity
-- Donation activity
-- Top content
+- Total earnings (ShelbyUSD paid directly to wallet)
+- Active vs expired subscriber count
+- Content views over a 30-day padded window
+- Views by content file
+- File type breakdown
+- Subscriber starts over time
+- Recent supporter activity (subscriptions and donation notes)
+- Top content by views
 
 Analytics are designed as a creator intelligence layer, not a generic admin dashboard.
 
 ---
 
-# Tech Stack
+### Creator Onboarding
+
+The vault dashboard includes a live storefront checklist that reflects real database state:
+
+- Profile named
+- Bio written
+- Public preview uploaded
+- Pricing decided
+- First file uploaded
+
+Each incomplete item shows an inline hint with a direct link to fix it. Once all items are complete, a "Your storefront is live" banner appears with a link to the public storefront.
+
+---
+
+### Explore & Discovery
+
+- Search creators by name, category, or bio
+- Sort by newest, most subscribers, price (low/high), or most content
+- Filter by category lane with live creator and file counts
+- Empty lanes show a helpful prompt instead of a broken grid
+
+---
+
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -178,7 +242,7 @@ Analytics are designed as a creator intelligence layer, not a generic admin dash
 
 ---
 
-# Architecture
+## Architecture
 
 ```txt
 Frontend (Next.js)
@@ -207,63 +271,53 @@ Creator / Supporter Actions
         |      +-- Verify payment transactions
         |      +-- Save metadata
         |      +-- Track subscriptions and donations
+        |      +-- Enforce subscription expiry
         |
         +-- Supabase
                +-- Vaults
-               +-- Content
-               +-- Subscriptions
-               +-- Donations
+               +-- Content (with visibility state)
+               +-- Subscriptions (with tx_hash, block_height, expiry)
+               +-- Donations (with tx_hash, block_height, note)
                +-- Favourites
                +-- Content views
 ```
 
 ---
 
-# Routes
+## Routes
 
 | Route | Purpose |
 |---|---|
 | `/` | Public marketplace homepage |
-| `/explore` | Creator discovery page |
+| `/explore` | Creator discovery with search, sort, and category filters |
 | `/creator/[wallet]` | Public creator storefront |
 | `/subscribe/[wallet]` | Paid subscription checkout |
-| `/profile` | Connected supporter profile |
+| `/profile` | Connected supporter profile with receipts and renewal |
 | `/vault` | Private creator workspace |
-| `/vault/upload` | Upload and publish Shelby content |
+| `/vault/upload` | Upload and publish Shelby content with visibility control |
 | `/vault/settings` | Edit creator profile, assets, pricing, and access |
 | `/vault/analytics` | Creator analytics |
 
 ---
 
-# Getting Started
+## Getting Started
 
-## Clone
+### Clone
 
 ```bash
 git clone https://github.com/NizarAZ/Verdact-App.git
-
 cd Verdact-App
 ```
 
----
-
-## Install
+### Install
 
 ```bash
 npm install
 ```
 
----
+### Environment Variables
 
-## Environment Variables
-
-Create:
-
-```txt
-.env.local
-```
-
-Add:
+Create `.env.local` and add:
 
 ```env
 # Shelby Protocol
@@ -278,17 +332,23 @@ SUPABASE_ANON_KEY=your_key
 SUPABASE_SERVICE_ROLE_KEY=your_key
 ```
 
----
+### Database Setup
 
-## Database Setup
-
-Run the schema in Supabase SQL Editor:
+**Fresh install** — run the base schema in Supabase SQL Editor:
 
 ```txt
 scripts/supabase-onchain-schema.sql
 ```
 
-The schema creates:
+**Existing database** — also run the review-ready patch to add new columns:
+
+```txt
+scripts/supabase-review-ready-patch.sql
+```
+
+The patch adds `is_locked`, `tags`, and `block_height` columns and auto-migrates existing content visibility based on vault access mode.
+
+The base schema creates:
 
 - `vaults`
 - `content`
@@ -297,30 +357,19 @@ The schema creates:
 - `favourites`
 - `content_views`
 
-It also removes the old RAG tables:
-
-- `documents`
-- `answer_receipts`
-
----
-
-## Run Locally
+### Run Locally
 
 ```bash
 npm run dev
 ```
 
-Open:
-
-```txt
-http://localhost:3000
-```
+Open `http://localhost:3000`
 
 Connect Petra Wallet when you want to publish, subscribe, donate, favourite, or manage a vault.
 
 ---
 
-# Wallet Setup
+## Wallet Setup
 
 1. Install Petra Wallet
 2. Switch to Shelbynet
@@ -329,7 +378,7 @@ Connect Petra Wallet when you want to publish, subscribe, donate, favourite, or 
 
 ---
 
-# Project Structure
+## Project Structure
 
 ```txt
 Verdact-App/
@@ -372,44 +421,57 @@ Verdact-App/
 |
 +-- public/
 +-- scripts/
+|   +-- supabase-onchain-schema.sql
+|   +-- supabase-review-ready-patch.sql
 ```
 
 ---
 
-# Current Capabilities
+## Current Capabilities
 
-- Public creator marketplace
+- Public creator marketplace with live preview drops
 - Creator storefront pages
-- Free creator donations
-- Paid creator subscriptions
-- Active subscription checks
-- Shelby blob upload and read flow
-- Creator vault setup
-- Creator content upload
-- File settings management
+- Public preview / locked / free content visibility system
+- Content viewer for PDF, video, audio, image, and text files
+- Free creator donations with presets and supporter notes
+- Paid creator subscriptions with server-side expiry enforcement
+- Subscription renewal flow with 7-day warning
+- Active subscription checks against Shelbynet transactions
+- Shelby blob upload and read flow with retry on fetch error
+- Shelby Explorer links on every published blob and transaction
+- Downloadable JSON transaction receipts
+- Verified-payment badge on storefronts
+- Network indicator (Shelbynet) in navbar
+- Wallet address copy-to-clipboard throughout UI
+- Creator vault setup and content upload
+- File settings management (title, description, visibility, tags)
 - Profile avatar and cover uploads
-- Supporter profile
+- Supporter profile with active subscriptions and donation history
 - Favourites
-- Creator analytics
+- Creator analytics (30-day padded charts, retention, file-type breakdown, top content)
+- Explore page with search, sort, and category filters
+- Creator onboarding checklist with live state and inline hints
+- Storefront share snippet generation
+- Mobile responsive layout (375px+)
+- Skeleton loading states on all data-heavy pages
 - Vercel deployment
 
 ---
 
-# Roadmap
+## Roadmap
 
 - Creator discovery ranking
 - Better media thumbnails and transcoding
 - Storefront customization
-- Subscription renewal reminders
 - Creator collections and bundles
 - Encrypted private drops
 - Multi-wallet support
-- Shelby Explorer links for every published blob
 - Better creator payout reporting
+- pg_cron scheduled job for subscription expiry (currently checked on profile load)
 
 ---
 
-# Vision
+## Vision
 
 Verdact is building infrastructure for:
 
@@ -420,13 +482,13 @@ A marketplace where creators own the vault, the audience, and the wallet relatio
 
 ---
 
-# Live Demo
+## Live Demo
 
 https://verdact.vercel.app/
 
 ---
 
-# License
+## License
 
 MIT
 
